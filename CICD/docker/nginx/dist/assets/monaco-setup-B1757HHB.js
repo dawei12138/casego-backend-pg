@@ -1,0 +1,1 @@
+import"./toggleHighContrast-DkMSNUG7.js";function n(r){return new Worker("/assets/editor.worker-DX6ApQqM.js",{name:r==null?void 0:r.name})}function a(r){return new Worker("/assets/json.worker-CIZWV9vN.js",{name:r==null?void 0:r.name})}self.MonacoEnvironment={getWorker(r,e){return e==="json"?new a:new n}};

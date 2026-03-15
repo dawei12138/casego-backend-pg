@@ -1,0 +1,1 @@
+import{w as e}from"./index-CyNcCxzt.js";function i(t){return e({url:"/api_test_execution_log/execution_log/list",method:"get",params:t})}function n(t){return e({url:"/api_test_execution_log/execution_log/"+t,method:"get"})}export{n as g,i as l};

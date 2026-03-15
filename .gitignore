@@ -1,0 +1,34 @@
+# Build and Release Folders
+bin-debug/
+bin-release/
+[Oo]bj/
+[Bb]in/
+
+
+
+
+# Other files and folders
+.settings/
+
+# Executables
+*.swf
+*.air
+*.ipa
+*.apk
+
+# Project files, i.e. `.project`, `.actionScriptProperties` and `.flexProperties`
+# should NOT be excluded as they contain compiler settings and other important
+# information for Eclipse / Flash Builder.
+/logs
+/alembic
+/CaseGo/upload_path/files
+/module_admin/api_project_submodules/dao/logs
+/module_fastmcp/logs
+/module_fastmcp/resources/logs
+/utils/api_workflow_tools/logs
+/docs/工作流节点新增API文档.md
+/utils/api_tools/executors/logs/2025-12-09_error.log
+/.env.dev
+/venv/
+/docs/
+/CaseGo/agent_workspace/

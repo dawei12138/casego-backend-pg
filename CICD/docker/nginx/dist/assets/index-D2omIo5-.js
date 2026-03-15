@@ -1,0 +1,1 @@
+import{r,m as t,q as a,t as n}from"./json-editor-K7BjL61a.js";const d={__name:"index",setup(l){return r("/dev-api/druid/login.html"),(o,e)=>(a(),t("div",null,[...e[0]||(e[0]=[n("div",null,"我是数据监控",-1)])]))}};export{d as default};

@@ -1,0 +1,4 @@
+2025-08-16 13:50:28.191 |  | INFO     | config.get_redis:create_redis_pool:182 - 开始连接redis...
+2025-08-16 13:50:28.368 |  | INFO     | config.get_redis:create_redis_pool:208 - redis连接成功，连接池已预热
+2025-08-16 13:50:28.418 |  | WARNING  | __main__:add_cache_data_services:170 - 新增缓存耗时；0.05051422119140625s
+2025-08-16 13:50:28.444 |  | WARNING  | __main__:get_cachedata_by_key:43 - 获取缓存；0.025354385375976562s

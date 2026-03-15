@@ -1,0 +1,128 @@
+version: '3.8'
+
+# 生产环境部署配置 (PostgreSQL 版本) - 使用预构建镜像
+# 使用方式: docker compose -f CICD/docker-postgresql/docker-compose.prod.yml up -d
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: casego-pg-postgres:latest
+    container_name: casego-pg-postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=123456
+      - POSTGRES_DB=casego
+      - TZ=Asia/Shanghai
+    #ports:
+      #- "54321:5432"
+    volumes:
+      # 持久化数据库数据
+      - ./data/postgresql:/var/lib/postgresql/data
+    command: >
+      postgres
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=768MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=128MB
+      -c log_timezone=Asia/Shanghai
+      -c timezone=Asia/Shanghai
+    networks:
+      casego_pg_net:
+        ipv4_address: 10.89.0.3
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d casego"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 缓存
+  redis:
+    image: casego-pg-redis:latest
+    container_name: casego-pg-redis
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai
+    #ports:
+      #- "6689:6379"
+    volumes:
+      # 持久化 Redis 数据
+      - ./data/redis:/data
+    networks:
+      casego_pg_net:
+        ipv4_address: 10.89.0.4
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "123456", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI 后端 (PostgreSQL 版本)
+  backend:
+    image: casego-pg-backend:latest
+    container_name: casego-pg-backend
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+      - APP_ENV=prod
+      - APP_PORT=9099
+      - APP_WORKERS=3
+      - DB_TYPE=postgres
+      - DB_HOST=10.89.0.3
+      - DB_PORT=5432
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=123456
+      - DB_DATABASE=casego
+      - REDIS_HOST=10.89.0.4
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=123456
+    ports:
+      - "9099:9099"
+    volumes:
+      # 映射应用目录
+      - ./data/backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      casego_pg_net:
+        ipv4_address: 10.89.0.5
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9099/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx 前端
+  nginx:
+    image: casego-pg-nginx:latest
+    container_name: casego-pg-nginx
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai
+    ports:
+      - "80:80"
+    volumes:
+      # 映射日志目录
+      - ./data/nginx/logs:/var/log/nginx
+      # 映射前端文件和配置
+      - ./data/nginx/html:/data/html
+      - ./data/nginx/conf.d:/etc/nginx/conf.d
+    depends_on:
+      - backend
+    networks:
+      casego_pg_net:
+        ipv4_address: 10.89.0.6
+
+networks:
+  casego_pg_net:
+    name: casego_pg_net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.89.0.0/24

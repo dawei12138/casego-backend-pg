@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ../..
+      dockerfile: CICD/docker/backend/Dockerfile
+    container_name: casego-backend
+    ports:
+      - "9099:9099"
+    environment:
+      # 可以通过环境变量覆盖配置
+      - APP_ENV=prod
+      - TZ=Asia/Shanghai
+    volumes:
+      # 方案 1：映射空目录，使用容器内的默认代码（首次启动会自动复制）
+      # - ./data/app:/app
+
+      # 方案 2：映射宿主机已有的代码目录（开发模式，代码热更新）
+      # - ../../backend:/app
+
+      # 方案 3：只映射配置文件和日志
+      # - ./data/.env.prod:/app/.env.prod
+      # - ./data/logs:/app/logs
+
+      # 建议至少映射日志目录便于调试
+      - ./data/logs:/app/logs
+    depends_on:
+      - mysql
+      - redis
+    restart: unless-stopped
+    networks:
+      - casego-network
+
+  mysql:
+    image: mysql:8.0
+    container_name: casego-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: ruoyi-fastapi
+      TZ: Asia/Shanghai
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    networks:
+      - casego-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: casego-redis
+    volumes:
+      - ./data/redis:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - casego-network
+
+networks:
+  casego-network:
+    name: casego-network
+    driver: bridge

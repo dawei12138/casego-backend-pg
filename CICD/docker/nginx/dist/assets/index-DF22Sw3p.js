@@ -1,0 +1,1 @@
+import{u as s,a as c}from"./index-CyqOYD8J.js";import{m as n,q as u}from"./json-editor-K7BjL61a.js";const f={__name:"index",setup(p){const e=s(),t=c(),{params:o,query:r}=e,{path:a}=o;return t.replace({path:"/"+a,query:r}),(m,_)=>(u(),n("div"))}};export{f as default};

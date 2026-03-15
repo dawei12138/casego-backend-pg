@@ -1,0 +1,136 @@
+{
+  "code": 200,
+  "msg": "操作成功",
+  "rows": [
+    {
+      "moduleId": 159,
+      "name": "登录模块",
+      "type": "module",
+      "children": [],
+      "testCases": [
+        {
+          "caseId": 1857,
+          "name": "Login",
+          "method": "POST",
+          "type": "api"
+        },
+        {
+          "caseId": 1858,
+          "name": "Get Login User Info",
+          "method": "GET",
+          "type": "api"
+        },
+        {
+          "caseId": 1859,
+          "name": "Get Login User Routers",
+          "method": "GET",
+          "type": "api"
+        },
+        {
+          "caseId": 1860,
+          "name": "Register User",
+          "method": "POST",
+          "type": "api"
+        },
+        {
+          "caseId": 1861,
+          "name": "Logout",
+          "method": "POST",
+          "type": "api"
+        }
+      ],
+      "count": 5
+    },
+    {
+      "moduleId": 225,
+      "name": "Faker配置",
+      "type": "module",
+      "children": [],
+      "testCases": [
+        {
+          "caseId": 2332,
+          "name": "获取自定义 Faker 配置",
+          "method": "GET",
+          "type": "api"
+        },
+        {
+          "caseId": 2333,
+          "name": "校验代码语法",
+          "method": "POST",
+          "type": "api"
+        },
+        {
+          "caseId": 2334,
+          "name": "保存自定义 Faker 配置",
+          "method": "POST",
+          "type": "api"
+        },
+        {
+          "caseId": 2335,
+          "name": "测试执行函数",
+          "method": "POST",
+          "type": "api"
+        },
+        {
+          "caseId": 2336,
+          "name": "获取所有可用函数列表",
+          "method": "GET",
+          "type": "api"
+        }
+      ],
+      "count": 5
+    },
+    {
+      "moduleId": 224,
+      "name": "公共脚本",
+      "type": "module",
+      "children": [],
+      "testCases": [
+        {
+          "caseId": 2317,
+          "name": "Get Api Script Library Script Library List",
+          "method": "GET",
+          "type": "api"
+        },
+        {
+          "caseId": 2318,
+          "name": "Add Api Script Library Script Library",
+          "method": "POST",
+          "type": "api"
+        },
+        {
+          "caseId": 2319,
+          "name": "Edit Api Script Library Script Library",
+          "method": "PUT",
+          "type": "api"
+        },
+        {
+          "caseId": 2320,
+          "name": "Delete Api Script Library Script Library",
+          "method": "DELETE",
+          "type": "api"
+        },
+        {
+          "caseId": 2321,
+          "name": "Query Detail Api Script Library Script Library",
+          "method": "GET",
+          "type": "api"
+        },
+        {
+          "caseId": 2322,
+          "name": "Export Api Script Library Script Library List",
+          "method": "POST",
+          "type": "api"
+        },
+        {
+          "caseId": 2325,
+          "name": "Execute Script",
+          "method": "POST",
+          "type": "api"
+        }
+      ],
+      "count": 7
+    }],
+  "success": true,
+  "time": "2025-12-16T09:21:35.542311"
+}

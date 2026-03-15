@@ -1,0 +1,1 @@
+import{w as o}from"./index-CyqOYD8J.js";function a(t){return o({url:"/workflow/workflow/workflowtable",method:"get",params:{workflowId:t}})}function e(t){return o({url:"/api_param_item/item",method:"put",data:t})}export{e as b,a as g};

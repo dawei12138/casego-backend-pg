@@ -1,0 +1,312 @@
+{
+  "executor": {
+    "id": "exec_001",
+    "name": "测试执行流程",
+    "version": "1.0.0",
+    "description": "包含流程控制的测试执行器配置",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z",
+    "nodes": [
+      {
+        "id": "node_001",
+        "name": "主流程组",
+        "type": "group",
+        "description": "主要测试流程分组",
+        "is_run": true,
+        "config": {
+          "name": "主要测试流程分组"
+        },
+        "children": [
+          {
+            "id": "node_002",
+            "name": "环境检查",
+            "type": "task",
+            "description": "检查测试环境是否可用",
+            "is_run": true,
+            "config": {
+              "case_id": "case_001"
+            },
+            "children": []
+          },
+          {
+            "id": "node_003",
+            "name": "用户登录判断",
+            "type": "if",
+            "description": "判断是否需要用户登录",
+            "is_run": true,
+            "config": {
+              "expected_value": true,
+              "actual_value": "${need_login}",
+              "condition": "=",
+              "else_node_id": "node_012"
+            },
+            "children": [
+              {
+                "id": "node_004",
+                "name": "执行登录",
+                "type": "task",
+                "description": "执行用户登录操作",
+                "is_run": true,
+                "config": {
+                  "case_id": "case_002"
+                },
+                "children": []
+              }
+            ]
+          },
+          {
+            "id": "node_012",
+            "name": "跳过登录处理",
+            "type": "else",
+            "description": "当不需要登录时执行的逻辑",
+            "is_run": true,
+            "config": {
+              "bind_if_node_id": "node_003"
+            },
+            "children": [
+              {
+                "id": "node_013",
+                "name": "使用默认token",
+                "type": "task",
+                "description": "设置默认的访问token",
+                "is_run": true,
+                "config": {},
+                "children": []
+              }
+            ]
+          },
+          {
+            "id": "node_005",
+            "name": "重复执行测试",
+            "type": "for",
+            "description": "重复执行指定次数的测试",
+            "is_run": true,
+            "config": {
+              "loop_count": 3,
+              "break_condition": {
+                "expected_value": "success",
+                "actual_value": "${loop_result}",
+                "condition": "!="
+              },
+              "on_error": "skip"
+            },
+            "children": [
+              {
+                "id": "node_006",
+                "name": "创建测试数据",
+                "type": "task",
+                "description": "创建测试所需的数据",
+                "is_run": true,
+                "config": {
+                  "case_id": "case_003"
+                },
+                "children": []
+              }
+            ]
+          },
+          {
+            "id": "node_007",
+            "name": "遍历测试数据",
+            "type": "foreach",
+            "description": "遍历所有测试数据进行验证",
+            "is_run": true,
+            "config": {
+              "loop_array": [
+                "item1",
+                "item2",
+                "item3"
+              ],
+              "break_condition": {
+                "expected_value": 200,
+                "actual_value": "${response_status}",
+                "condition": "!="
+              },
+              "on_error": "continue"
+            },
+            "children": [
+              {
+                "id": "node_008",
+                "name": "数据验证分组",
+                "type": "group",
+                "description": "数据验证相关操作分组",
+                "is_run": true,
+                "config": {
+                  "name": "数据验证相关操作分组"
+                },
+                "children": [
+                  {
+                    "id": "node_009",
+                    "name": "查询数据",
+                    "type": "task",
+                    "description": "查询当前数据详情",
+                    "is_run": true,
+                    "config": {
+                      "case_id": "case_004"
+                    },
+                    "children": []
+                  },
+                  {
+                    "id": "node_010",
+                    "name": "更新数据",
+                    "type": "task",
+                    "description": "更新当前数据",
+                    "is_run": true,
+                    "config": {
+                      "case_id": "case_005"
+                    },
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "node_011",
+            "name": "等待处理完成",
+            "type": "task",
+            "description": "等待3秒钟让系统处理完成",
+            "is_run": true,
+            "config": {
+              "wait_time": 3000
+            },
+            "children": []
+          },
+          {
+            "id": "node_014",
+            "name": "清理测试数据",
+            "type": "task",
+            "description": "清理所有测试数据",
+            "is_run": true,
+            "config": {
+              "case_id": "case_006"
+            },
+            "children": []
+          }
+        ]
+      }
+    ],
+    "execution_config": {
+      "mode": "sequential",
+      "timeout": 300,
+      "retry_policy": {
+        "max_retries": 3,
+        "retry_delay": 1,
+        "retry_on": [
+          "timeout",
+          "connection_error"
+        ]
+      },
+      "report_config": {
+        "format": [
+          "json",
+          "html"
+        ],
+        "include_logs": true,
+        "include_screenshots": false
+      }
+    }
+  },
+  "schema_version": "1.0",
+  "node_types": {
+    "if": {
+      "description": "条件判断节点",
+      "required_config": [
+        "expected_value",
+        "actual_value",
+        "condition"
+      ],
+      "optional_config": [
+        "else_node_id"
+      ],
+      "supports_children": true
+    },
+    "else": {
+      "description": "条件判断else节点",
+      "required_config": [
+        "bind_if_node_id"
+      ],
+      "optional_config": [],
+      "supports_children": true
+    },
+    "for": {
+      "description": "循环节点",
+      "required_config": [
+        "loop_count"
+      ],
+      "optional_config": [
+        "break_condition",
+        "on_error"
+      ],
+      "supports_children": true
+    },
+    "foreach": {
+      "description": "遍历节点",
+      "required_config": [
+        "loop_array"
+      ],
+      "optional_config": [
+        "break_condition",
+        "on_error"
+      ],
+      "supports_children": true
+    },
+    "group": {
+      "description": "分组节点",
+      "required_config": [
+        "name"
+      ],
+      "optional_config": [],
+      "supports_children": true
+    },
+    "task": {
+      "description": "任务执行节点",
+      "required_config": [],
+      "optional_config": [
+        "case_id",
+        "wait_time"
+      ],
+      "supports_children": false,
+      "task_types": {
+        "case": {
+          "description": "用例执行任务",
+          "required_config": [
+            "case_id"
+          ]
+        },
+        "wait": {
+          "description": "等待时间任务",
+          "required_config": [
+            "wait_time"
+          ]
+        },
+        "other": {
+          "description": "其他类型任务",
+          "required_config": []
+        }
+      }
+    }
+  },
+  "condition_operators": [
+    "=",
+    "!=",
+    "exist",
+    "not_exist",
+    ">",
+    ">=",
+    "<",
+    "<=",
+    "REGULAR_TYPE",
+    "contain",
+    "not_contain",
+    "is_null",
+    "is_not_null",
+    "belong_to_set",
+    "not_belong_to_set"
+  ],
+  "error_handling_options": [
+    "end_loop",
+    "end_execution",
+    "skip",
+    "ignore"
+  ]
+}
