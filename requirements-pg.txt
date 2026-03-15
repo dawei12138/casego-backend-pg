@@ -271,3 +271,4 @@ zstandard==0.25.0
 langchain-deepseek
 deepagents~=0.4.4
 langchain-mcp-adapters
+tavily-python
