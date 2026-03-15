@@ -6,17 +6,6 @@ ENV TZ=Asia/Shanghai \
     PYTHONUNBUFFERED=1 \
     APP_ENV=prod
 
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    gcc \
-    g++ \
-    libpq-dev \
-    curl \
-    bash \
-    netcat-openbsd \
-    && rm -rf /var/lib/apt/lists/*
-
 # 设置工作目录
 WORKDIR /app
 
