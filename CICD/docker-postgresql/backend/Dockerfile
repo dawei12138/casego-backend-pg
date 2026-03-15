@@ -23,8 +23,9 @@ WORKDIR /app
 # 先复制依赖文件，有变化才重新安装
 COPY ./requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt \
-    -i https://pypi.mirrors.ustc.edu.cn/simple \
-    --trusted-host pypi.mirrors.ustc.edu.cn \
+    -i https://mirrors.aliyun.com/pypi/simple/ \
+    --extra-index-url https://pypi.org/simple \
+    --trusted-host mirrors.aliyun.com \
     --timeout=120 \
     --retries=5
 
