@@ -43,15 +43,17 @@ def _load_default_system_prompt() -> str:
 
 
 class _WindowsCompatShellBackend(LocalShellBackend):
-    """Windows 兼容 Shell 后端。
+    """跨平台兼容 Shell 后端。
 
-    修复两个 Windows 特有问题：
-    1. download_files (rb) 与 edit (r) 换行符不一致：
+    修复以下问题：
+    1. download_files (rb) 与 edit (r) 换行符不一致（Windows 特有）：
        download_files 以 rb 模式读取保留 \\r\\n，edit 以 r 模式自动转 \\n，
        导致 SummarizationMiddleware 做字符串替换时匹配失败。
-    2. virtual_mode=True 时虚拟路径与 shell 命令不兼容：
+    2. virtual_mode=True 时虚拟路径与 shell 命令不兼容（跨平台）：
        文件操作返回虚拟路径（如 /script.py），LLM 在 shell 命令中使用该路径，
-       但 Windows 将 / 解析为当前驱动器根目录（如 D:\\），导致找不到文件。
+       - Windows 将 / 解析为当前驱动器根目录（如 D:\\）
+       - Linux 将 /script.py 解析为文件系统根目录
+       两种情况均会导致找不到文件，需统一转换为真实工作区路径。
     """
 
     def download_files(self, paths: list[str]) -> list[FileDownloadResponse]:
@@ -61,26 +63,66 @@ class _WindowsCompatShellBackend(LocalShellBackend):
                 resp.content = resp.content.replace(b"\r\n", b"\n")
         return responses
 
+    def _convert_virtual_paths(self, command: str) -> str:
+        """将命令中的虚拟路径转换为工作区真实路径（跨平台）。
+
+        virtual_mode=True 时，LLM 使用形如 /filename.py 的虚拟路径，
+        需替换为 {workspace}/filename.py 的真实绝对路径。
+
+        转换规则：
+        - 空白、引号、等号后紧跟 /字母或下划线 → 替换为工作区路径
+        - 命令以 /path 开头的情况同样处理
+        - 系统级路径（/usr、/bin、/etc、/tmp、/var、/home、/proc、/sys、/dev）不替换
+        """
+        if not self.virtual_mode:
+            return command
+
+        workspace = str(self.cwd).replace('\\', '/')
+
+        # 不应被替换的系统路径前缀（Linux 标准目录）
+        system_path_prefixes = (
+            '/usr/', '/bin/', '/etc/', '/tmp/', '/var/',
+            '/home/', '/proc/', '/sys/', '/dev/', '/opt/',
+            '/lib/', '/lib64/', '/sbin/', '/run/',
+        )
+
+        def _replace_path(match: re.Match) -> str:
+            """替换单个路径匹配，跳过系统路径。"""
+            prefix = match.group(1)   # 前置分隔符（空白/引号/等号），可能为空
+            path = match.group(2)     # /filename 部分
+            # 系统路径不替换
+            if any(path.startswith(p) for p in system_path_prefixes):
+                return match.group(0)
+            return f'{prefix}{workspace}/{path[1:]}'
+
+        # 替换：空白/引号/等号后紧跟 /字母或下划线 开头的路径
+        command = re.sub(
+            r'([\s"\'=])(/[a-zA-Z_][^\s"\']*)',
+            _replace_path,
+            command,
+        )
+
+        # 替换：命令以 /path 开头的情况
+        def _replace_leading_path(match: re.Match) -> str:
+            path = match.group(0)
+            if any(path.startswith(p) for p in system_path_prefixes):
+                return path
+            return f'{workspace}/{path[1:]}'
+
+        command = re.sub(r'^(/[a-zA-Z_][^\s"\']*)', _replace_leading_path, command)
+
+        return command
+
     def execute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
-        """执行 shell 命令，包含 Windows 兼容性修复。
+        """执行 shell 命令，包含跨平台兼容性修复。
 
         修复内容：
-        1. 虚拟路径转换：virtual_mode=True 时 /script.py → 真实工作区路径
+        1. 虚拟路径转换（跨平台）：virtual_mode=True 时 /script.py → 真实工作区路径
         2. stdin 重定向：防止子进程等待 stdin 输入导致挂起
-        3. 隐藏控制台窗口：防止 Windows 上弹出 cmd 窗口
+        3. 隐藏控制台窗口（Windows）：防止弹出 cmd 窗口
         """
-        # 虚拟路径转换（Windows）
-        if os.name == 'nt' and self.virtual_mode:
-            workspace = str(self.cwd).replace('\\', '/')
-            # 空白/引号/等号后紧跟 /文件名 → 替换为工作区绝对路径
-            command = re.sub(
-                r'(?<=[\s"\'=])/(?=[a-zA-Z_][\w./-]*)',
-                f'{workspace}/',
-                command,
-            )
-            # 命令以 /path 开头的情况
-            if re.match(r'^/[a-zA-Z_]', command):
-                command = f'{workspace}/{command[1:]}'
+        # 虚拟路径转换（跨平台，不再限制 Windows）
+        command = self._convert_virtual_paths(command)
 
         # 参数校验
         if not command or not isinstance(command, str):
@@ -101,7 +143,7 @@ class _WindowsCompatShellBackend(LocalShellBackend):
                 shell=True,
                 capture_output=True,
                 encoding='utf-8',   # 强制 UTF-8，避免 Windows 默认 GBK 解码崩溃
-                errors='replace',   # 无法解码的字节用 � 替代，不抛异常
+                errors='replace',   # 无法解码的字节用 ? 替代，不抛异常
                 timeout=effective_timeout,
                 env=self._env,
                 cwd=str(self.cwd),
@@ -152,7 +194,6 @@ class _WindowsCompatShellBackend(LocalShellBackend):
                 exit_code=1,
                 truncated=False,
             )
-
 
 # 全局工作区根目录（与原 UserThreadFilesystemBackend 保持一致）
 WORKSPACE_ROOT = os.path.join("CaseGo", "agent_workspace")
