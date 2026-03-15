@@ -63,37 +63,46 @@ class _WindowsCompatShellBackend(LocalShellBackend):
                 resp.content = resp.content.replace(b"\r\n", b"\n")
         return responses
 
+    def _resolve_virtual_to_real(self, virtual_path: str) -> str | None:
+        """尝试将虚拟路径解析为工作区内的真实路径。
+
+        复用父类 _resolve_path（库自带的虚拟路径→真实路径解析），
+        如果解析后的路径（或其父目录）确实存在于工作区内，返回真实绝对路径；
+        否则返回 None，表示该路径不属于工作区（可能是系统路径如 /usr/bin）。
+        """
+        try:
+            resolved = self._resolve_path(virtual_path)
+            # 文件或目录本身存在
+            if resolved.exists():
+                return str(resolved)
+            # 父目录存在（支持即将创建的文件，如 echo "x" > /subdir/new.py）
+            if resolved.parent != self.cwd and resolved.parent.exists():
+                return str(resolved)
+        except (ValueError, OSError):
+            pass
+        return None
+
     def _convert_virtual_paths(self, command: str) -> str:
         """将命令中的虚拟路径转换为工作区真实路径（跨平台）。
 
         virtual_mode=True 时，LLM 使用形如 /filename.py 的虚拟路径，
-        需替换为 {workspace}/filename.py 的真实绝对路径。
+        需替换为工作区内的真实绝对路径。
 
-        转换规则：
-        - 空白、引号、等号后紧跟 /字母或下划线 → 替换为工作区路径
-        - 命令以 /path 开头的情况同样处理
-        - 系统级路径（/usr、/bin、/etc、/tmp、/var、/home、/proc、/sys、/dev）不替换
+        转换策略（复用库自带的 _resolve_path，无需硬编码系统路径排除列表）：
+        - 用 _resolve_path 将虚拟路径解析为工作区内真实路径
+        - 如果解析后的文件/目录（或其父目录）存在 → 替换为真实路径
+        - 如果 _resolve_path 抛出异常或解析后不存在 → 保持原样（系统路径）
         """
         if not self.virtual_mode:
             return command
 
-        workspace = str(self.cwd).replace('\\', '/')
-
-        # 不应被替换的系统路径前缀（Linux 标准目录）
-        system_path_prefixes = (
-            '/usr/', '/bin/', '/etc/', '/tmp/', '/var/',
-            '/home/', '/proc/', '/sys/', '/dev/', '/opt/',
-            '/lib/', '/lib64/', '/sbin/', '/run/',
-        )
-
         def _replace_path(match: re.Match) -> str:
-            """替换单个路径匹配，跳过系统路径。"""
-            prefix = match.group(1)   # 前置分隔符（空白/引号/等号），可能为空
+            prefix = match.group(1)   # 前置分隔符（空白/引号/等号）
             path = match.group(2)     # /filename 部分
-            # 系统路径不替换
-            if any(path.startswith(p) for p in system_path_prefixes):
-                return match.group(0)
-            return f'{prefix}{workspace}/{path[1:]}'
+            real = self._resolve_virtual_to_real(path)
+            if real is not None:
+                return f'{prefix}{real.replace(chr(92), "/")}'
+            return match.group(0)
 
         # 替换：空白/引号/等号后紧跟 /字母或下划线 开头的路径
         command = re.sub(
@@ -105,9 +114,10 @@ class _WindowsCompatShellBackend(LocalShellBackend):
         # 替换：命令以 /path 开头的情况
         def _replace_leading_path(match: re.Match) -> str:
             path = match.group(0)
-            if any(path.startswith(p) for p in system_path_prefixes):
-                return path
-            return f'{workspace}/{path[1:]}'
+            real = self._resolve_virtual_to_real(path)
+            if real is not None:
+                return real.replace(chr(92), '/')
+            return path
 
         command = re.sub(r'^(/[a-zA-Z_][^\s"\']*)', _replace_leading_path, command)
 
