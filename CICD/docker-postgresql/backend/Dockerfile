@@ -1,4 +1,4 @@
-FROM my-fastapi-base:latest
+FROM casego-backend:latest
 
 # 设置环境变量
 ENV TZ=Asia/Shanghai \
@@ -6,21 +6,10 @@ ENV TZ=Asia/Shanghai \
     PYTHONUNBUFFERED=1 \
     APP_ENV=prod
 
-# 安装系统依赖
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    gcc \
-    g++ \
-    libpq-dev \
-    curl \
-    bash \
-    netcat-openbsd \
-    && rm -rf /var/lib/apt/lists/*
-
 # 设置工作目录
 WORKDIR /app
 
-# 先复制依赖文件并安装（利用 Docker 缓存）
+# 先复制依赖文件，有变化才重新安装
 COPY ./requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt \
     -i https://pypi.mirrors.ustc.edu.cn/simple \
