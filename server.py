@@ -71,6 +71,7 @@ from module_app.steps_elements.controller.steps_elements_controller import steps
 from module_app.websocket import agentTransportController
 
 from module_generator.controller.gen_controller import genController
+from module_llm.chat_mcp_config.controller.mcpconfig_controller import mcpconfigController
 from module_llm.chat_thread.controller.thread_controller import threadController
 
 from module_llm.llm_provider.controller.provider_config_controller import provider_configController
@@ -218,6 +219,7 @@ controller_list = [
     {'router': provider_configController, 'tags': ['大模型配置']},
     {'router': chatController, 'tags': ['大模型对话']},
     {'router': workspaceController, 'tags': ['AI工作区文件管理']},
+    {'router': mcpconfigController, 'tags': ['AImcp服务配置']},
     # {'router': testController, 'tags': ['测试的']},
 ]
 

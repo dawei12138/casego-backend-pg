@@ -20,6 +20,7 @@ from psycopg_pool import AsyncConnectionPool
 import asyncio
 
 from config.env import DataBaseConfig
+from module_llm.chat_agent.subagents import build_search_subagent
 from utils.log_util import logger
 
 # 默认系统提示词（模块加载时读取一次）
@@ -328,21 +329,25 @@ async def create_deep_agent_instance(
         else:
             non_mcp_tools.append(tool)
 
-    # 配置子 Agent：默认不包含 MCP 工具，避免浏览器状态问题
-    subagents = None
+    # 配置子 Agent 列表
+    subagents = []
+
+    # 1. 搜索子 Agent：始终注册，使主 Agent 无论是否开启联网搜索都能委派搜索任务
+    search_subagent = build_search_subagent(model=model)
+    subagents.append(search_subagent)
+    logger.info("注册子 Agent: search-agent（联网搜索）")
+
+    # 2. 如果有 MCP 工具且不启用子 Agent MCP，覆盖 general-purpose 子 Agent
     if not enable_subagent_mcp and mcp_tools:
-        # 覆盖默认的 general-purpose 子 Agent，移除 MCP 工具
-        subagents = [
-            {
-                "name": "general-purpose",
-                "description": "General-purpose agent for research and multi-step tasks",
-                "system_prompt": system_prompt,
-                "tools": non_mcp_tools,  # 只包含非 MCP 工具
-                "model": model,
-            }
-        ]
+        subagents.append({
+            "name": "general-purpose",
+            "description": "General-purpose agent for research and multi-step tasks",
+            "system_prompt": system_prompt,
+            "tools": non_mcp_tools,  # 只包含非 MCP 工具
+            "model": model,
+        })
         logger.info(
-            f"配置子 Agent: 移除 {len(mcp_tools)} 个 MCP 工具，"
+            f"配置 general-purpose 子 Agent: 移除 {len(mcp_tools)} 个 MCP 工具，"
             f"保留 {len(non_mcp_tools)} 个非 MCP 工具"
         )
 
@@ -354,7 +359,7 @@ async def create_deep_agent_instance(
         skills=skills_paths or [],
         backend=make_backend,
         checkpointer=checkpointer,
-        subagents=subagents,  # 配置子 Agent
+        subagents=subagents or None,  # 配置子 Agent（空列表时传 None 使用默认）
         name=f"agent-user{user_id}-thread{thread_id}",
     )
 
