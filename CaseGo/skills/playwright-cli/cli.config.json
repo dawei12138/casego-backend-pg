@@ -1,0 +1,12 @@
+{
+  "browser": {
+    "browserName": "chromium",
+    "cdpEndpoint": "http://116.196.75.29:19222/",
+    "cdpTimeout": 30000
+  },
+  "outputMode": "stdout",
+  "timeouts": {
+    "action": 5000,
+    "navigation": 60000
+  }
+}
