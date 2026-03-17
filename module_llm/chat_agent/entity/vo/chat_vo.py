@@ -46,6 +46,7 @@ class ChatRequest(BaseModel):
     system_prompt: Optional[str] = Field(default=None, description='系统提示词')
     enable_thinking: bool = Field(default=False, description='是否开启思考模式(扩展推理)')
     enable_web_search: bool = Field(default=False, description='是否开启联网搜索')
+    mcp_config_ids: Optional[List[str]] = Field(default=None, description='MCP服务器配置ID列表，传入则动态加载对应MCP工具')
 
 
 class ChatHistoryQuery(BaseModel):
@@ -67,6 +68,7 @@ class AnswerRequest(BaseModel):
     answers: dict = Field(description='用户回答，key为问题文本，value为选择的答案')
     enable_thinking: bool = Field(default=False, description='是否开启思考模式')
     enable_web_search: bool = Field(default=False, description='是否开启联网搜索')
+    mcp_config_ids: Optional[List[str]] = Field(default=None, description='MCP服务器配置ID列表，传入则动态加载对应MCP工具')
 
 
 class ToolCallModel(BaseModel):

@@ -42,6 +42,27 @@ async def get_mcpconfig_mcpconfig_list(
     return ResponseUtil.success(model_content=mcpconfig_page_query_result)
 
 
+@mcpconfigController.get(
+    '/all',
+    response_model=PageResponseModel,
+    dependencies=[Depends(CheckUserInterfaceAuth('mcpconfig:mcpconfig:list'))],
+    summary='获取MCP服务器配置列表',
+    description='根据查询条件获取MCP服务器配置分页列表数据',
+)
+async def get_mcpconfig_mcpconfig_list(
+        request: Request,
+        mcpconfig_page_query: McpconfigPageQueryModel = Depends(McpconfigPageQueryModel.as_query),
+        query_db: AsyncSession = Depends(get_db),
+):
+    # logger.info(mcpconfig_page_query.model_dump())
+    # 获取分页数据
+    mcpconfig_page_query_result = await McpconfigService.get_mcpconfig_all_list_services(query_db, mcpconfig_page_query,
+                                                                                     )
+    logger.info('获取成功')
+
+    return ResponseUtil.success(data=mcpconfig_page_query_result)
+
+
 @mcpconfigController.post(
     '',
     dependencies=[Depends(CheckUserInterfaceAuth('mcpconfig:mcpconfig:add'))],

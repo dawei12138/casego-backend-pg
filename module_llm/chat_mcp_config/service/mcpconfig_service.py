@@ -4,7 +4,8 @@ from config.constant import CommonConstant
 from exceptions.exception import ServiceException
 from module_admin.system.entity.vo.common_vo import CrudResponseModel
 from module_llm.chat_mcp_config.dao.mcpconfig_dao import McpconfigDao
-from module_llm.chat_mcp_config.entity.vo.mcpconfig_vo import DeleteMcpconfigModel, McpconfigModel, McpconfigPageQueryModel
+from module_llm.chat_mcp_config.entity.vo.mcpconfig_vo import DeleteMcpconfigModel, McpconfigModel, \
+    McpconfigPageQueryModel
 from utils.common_util import CamelCaseUtil
 from utils.excel_util import ExcelUtil
 
@@ -16,7 +17,7 @@ class McpconfigService:
 
     @classmethod
     async def get_mcpconfig_list_services(
-        cls, query_db: AsyncSession, query_object: McpconfigPageQueryModel, is_page: bool = False
+            cls, query_db: AsyncSession, query_object: McpconfigPageQueryModel, is_page: bool = False
     ):
         """
         获取MCP服务器配置列表信息service
@@ -30,6 +31,21 @@ class McpconfigService:
 
         return mcpconfig_list_result
 
+    @classmethod
+    async def get_mcpconfig_all_list_services(
+            cls, query_db: AsyncSession, query_object: McpconfigPageQueryModel
+    ):
+        """
+        获取MCP服务器配置列表信息service
+
+        :param query_db: orm对象
+        :param query_object: 查询参数对象
+        :param is_page: 是否开启分页
+        :return: MCP服务器配置列表信息对象
+        """
+        mcpconfig_list_result = await McpconfigDao.get_mcpconfig_orm_list(query_db, query_object)
+        mcpconfig_list = [config.model_dump(include={"config_id", "server_name"}, by_alias=True) for config in mcpconfig_list_result]
+        return mcpconfig_list
 
     @classmethod
     async def add_mcpconfig_services(cls, query_db: AsyncSession, page_object: McpconfigModel):

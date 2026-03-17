@@ -81,10 +81,13 @@ async def create_agent_and_model(
     user_id: int,
     thread_id: str,
     log_prefix: str = "",
+    mcp_tools: list = None,
 ):
     """
     公共设置：查找提供商配置 → 创建模型 → 构建 agent。
 
+    :param mcp_tools: 外部传入的 MCP 工具列表（由 mcp_tools_context 提供）。
+                      若不为 None，则合并到内置工具中。
     :return: (model, agent)
     :raises ServiceException: 提供商配置不存在
     """
@@ -97,12 +100,21 @@ async def create_agent_and_model(
     model = create_chat_model(
         provider_config, model_name, enable_thinking=enable_thinking,
     )
+
+    # 统一指定上下文长度限制，让 SummarizationMiddleware 的 ("fraction", 0.85) 触发器正常工作。
+    # 无论什么模型都强制设置 max_input_tokens=128000，上下文 ≥ 85%（约 108K token）时自动压缩。
+    model.profile = {"max_input_tokens": 128000}
+
     logger.info(
         f'{log_prefix}创建模型: provider={provider_config.provider_key}, '
         f'model={model_name}, enable_thinking={enable_thinking}'
     )
 
     tools = get_builtin_tools(enable_web_search=enable_web_search)
+    if mcp_tools:
+        tools.extend(mcp_tools)
+        logger.info(f'{log_prefix}注入 {len(mcp_tools)} 个 MCP 工具')
+
     skills_paths = ["/skills/"]
     agent = await create_deep_agent_instance(
         model=model,
@@ -167,13 +179,14 @@ async def process_stream_chunks(
         # ── 调试日志 ──
         if debug_chunks and chunk_count <= debug_chunks:
             content_preview = str(msg_chunk.content)[:100] if msg_chunk.content else "(empty)"
-            logger.info(
-                f'{log_prefix} #{chunk_count} node={node}, '
-                f'type={type(msg_chunk).__name__}, has_tool_calls={has_tool_calls}, '
-                f'content_preview={content_preview}'
-            )
+            # logger.info(
+            #     f'{log_prefix} #{chunk_count} node={node}, '
+            #     f'type={type(msg_chunk).__name__}, has_tool_calls={has_tool_calls}, '
+            #     f'content_preview={content_preview}'
+            # )
             if enable_thinking:
-                logger.info(f'{log_prefix} #{chunk_count} additional_kwargs: {additional_kwargs}')
+                pass
+                # logger.info(f'{log_prefix} #{chunk_count} additional_kwargs: {additional_kwargs}')
 
         # ── model 节点：累积工具调用 ──
         if node == "model" and has_tool_calls:

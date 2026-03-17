@@ -1,3 +1,5 @@
+from uuid import UUID as PyUUID
+
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
@@ -13,6 +15,25 @@ class McpconfigDao:
     """
     MCP服务器配置模块数据库操作层
     """
+
+    @classmethod
+    async def get_mcpconfig_by_ids(cls, db: AsyncSession, config_ids: List[str]) -> List[LlmMcpConfig]:
+        """
+        根据配置ID列表批量获取MCP服务器配置
+
+        :param db: orm对象
+        :param config_ids: 配置ID字符串列表
+        :return: LlmMcpConfig ORM对象列表
+        """
+        uuid_ids = [PyUUID(cid) for cid in config_ids]
+        result = await db.execute(
+            select(LlmMcpConfig)
+            .where(
+                LlmMcpConfig.config_id.in_(uuid_ids),
+                LlmMcpConfig.del_flag == "0",
+            )
+        )
+        return list(result.scalars().all())
 
     @classmethod
     async def get_mcpconfig_detail_by_id(cls, db: AsyncSession, config_id: int):

@@ -21,7 +21,7 @@ class McpconfigModel(BaseModel):
     enabled: Optional[bool] = Field(default=None, description='是否启用此服务器')
     transport: Optional[str] = Field(default=None, description='传输类型: stdio / streamable_http / sse / websocket')
     command: Optional[str] = Field(default=None, description='stdio模式: 可执行文件路径（如 npx、python、uvx）')
-    args: Optional[dict] = Field(default=None, description='stdio模式: 命令行参数列表，如 ["@playwright/mcp@latest", "--headless"]')
+    args: Optional[list] = Field(default=None, description='stdio模式: 命令行参数列表，如 ["@playwright/mcp@latest", "--headless"]')
     env: Optional[dict] = Field(default=None, description='stdio模式: 子进程环境变量字典')
     cwd: Optional[str] = Field(default=None, description='stdio模式: 子进程工作目录')
     url: Optional[str] = Field(default=None, description='streamable_http/sse/websocket模式: 远程服务器URL')

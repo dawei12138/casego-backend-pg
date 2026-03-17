@@ -21,7 +21,9 @@
       "Bash(grep:*)",
       "Bash(mv:*)",
       "Bash(find:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(where node:*)",
+      "Bash(where npx:*)"
     ],
     "deny": [],
     "ask": []

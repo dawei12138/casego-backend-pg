@@ -7,14 +7,18 @@ MCP 工具加载器
   2. 将 MCP 工具转换为标准 LangChain Tool，直接返回给 get_tools() 使用
   3. 提供带超时保护的异步加载，任何单台服务器失败不影响其余服务器
   4. 模块级缓存：应用生命周期内只加载一次，避免每次对话都重启 Playwright 进程
+  5. 支持从数据库配置动态加载 MCP 工具（按需加载，不缓存）
 
 调用方（tools.py）示例：
     from module_llm.chat_agent.mcp.loader import load_mcp_tools, mcp_tools_context
     mcp_tools = await load_mcp_tools()               # 无状态服务器 / 简单场景
     async with mcp_tools_context() as tools: ...     # 需要保持浏览器状态的场景
+    async with mcp_tools_context(servers=db_dict): ...  # 从数据库配置加载
 """
 import asyncio
+import os
 from contextlib import asynccontextmanager, AsyncExitStack
+from datetime import timedelta
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools as _lc_load_mcp_tools
@@ -66,6 +70,80 @@ def _enable_tool_error_handling(tools: list) -> list:
     for tool in tools:
         tool.handle_tool_error = True
     return tools
+
+
+def build_connections_from_db_configs(db_configs: list) -> dict:
+    """
+    将数据库 LlmMcpConfig ORM 对象列表转换为 MultiServerMCPClient 的 connections 字典。
+
+    转换规则：
+      - server_name 作为字典 key（若有重名则追加序号）
+      - transport 为必填字段
+      - stdio 类型提取: command, args, env, cwd
+      - HTTP 类型提取: url, headers, timeout(转timedelta), sse_read_timeout(转timedelta)
+      - session_kwargs 若存在则透传
+      - 跳过 enabled=False 的配置
+
+    :param db_configs: LlmMcpConfig ORM 实例列表
+    :return: {server_name: {transport, ...}} 字典，可直接传给 MultiServerMCPClient(connections=...)
+    """
+    connections = {}
+    used_names = set()
+
+    for cfg in db_configs:
+        if cfg.enabled is False:
+            continue
+
+        if not cfg.transport:
+            logger.warning(f"MCP config '{cfg.server_name}' (id={cfg.config_id}) 缺少 transport，跳过")
+            continue
+
+        # 重名处理
+        name = cfg.server_name
+        if name in used_names:
+            suffix = 2
+            while f"{name}_{suffix}" in used_names:
+                suffix += 1
+            name = f"{name}_{suffix}"
+        used_names.add(name)
+
+        conn = {"transport": cfg.transport}
+
+        if cfg.transport == "stdio":
+            if cfg.command:
+                conn["command"] = cfg.command
+            if cfg.args:
+                conn["args"] = cfg.args
+            if cfg.env:
+                # 将配置的 env 与系统环境变量合并，而非替换。
+                # 避免 Linux 风格的 PATH 覆盖 Windows 系统 PATH 导致找不到 node/npx 等命令。
+                merged_env = {**os.environ}
+                for k, v in cfg.env.items():
+                    if k.upper() == "PATH":
+                        # PATH 特殊处理：拼接而非覆盖，确保系统路径保留
+                        merged_env[k] = v + os.pathsep + os.environ.get(k, "")
+                    else:
+                        merged_env[k] = v
+                conn["env"] = merged_env
+            if cfg.cwd:
+                conn["cwd"] = cfg.cwd
+        else:
+            # streamable_http / sse / websocket
+            if cfg.url:
+                conn["url"] = cfg.url
+            if cfg.headers:
+                conn["headers"] = cfg.headers
+            if cfg.timeout:
+                conn["timeout"] = timedelta(seconds=cfg.timeout)
+            if cfg.sse_read_timeout:
+                conn["sse_read_timeout"] = timedelta(seconds=cfg.sse_read_timeout)
+
+        if cfg.session_kwargs:
+            conn["session_kwargs"] = cfg.session_kwargs
+
+        connections[name] = conn
+
+    return connections
 
 
 async def _do_load() -> list:
@@ -148,11 +226,14 @@ async def reload_mcp_tools() -> list:
 
 
 @asynccontextmanager
-async def mcp_tools_context():
+async def mcp_tools_context(servers: dict = None):
     """
     在 async with 块内为每个 MCP 服务器建立持久 session，退出时才关闭。
 
     适用于需要跨多次工具调用保持浏览器/进程状态的场景（如 Playwright）。
+
+    :param servers: 可选。外部传入的 connections 字典（如从数据库构建）。
+                    若为 None，则使用 get_enabled_servers() 获取静态配置。
 
     使用 client.session(server_name) + AsyncExitStack 同时持有所有 server 的
     session，再调用 load_mcp_tools(session) —— 工具闭包中 session is not None，
@@ -167,7 +248,8 @@ async def mcp_tools_context():
 
     若没有启用的 MCP 服务器，yield 空列表，不影响正常流程。
     """
-    servers = get_enabled_servers()
+    if servers is None:
+        servers = get_enabled_servers()
     if not servers:
         yield []
         return

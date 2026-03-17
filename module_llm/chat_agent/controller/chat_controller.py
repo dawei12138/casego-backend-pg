@@ -32,6 +32,8 @@ from module_llm.chat_agent.controller.stream_helpers import (
     check_interrupts,
     make_sse_response,
 )
+from module_llm.chat_mcp_config.dao.mcpconfig_dao import McpconfigDao
+from module_llm.chat_agent.mcp.loader import mcp_tools_context, build_connections_from_db_configs
 from module_llm.chat_thread.dao.thread_dao import ThreadDao
 from module_llm.chat_thread.entity.vo.thread_vo import ThreadModel
 from utils.log_util import logger
@@ -56,6 +58,7 @@ async def chat_completions(
     流式对话接口（基于 deepagents）
 
     流程: 获取提供商配置 → 创建模型 → 构建 deep agent → 流式输出
+    支持通过 mcp_config_ids 动态加载 MCP 工具
     """
     # 1. 检查thread是否已存在，不存在则新增
     existing_thread = await ThreadDao.get_thread_detail_by_id(query_db, thread_id=request.thread_id)
@@ -72,12 +75,13 @@ async def chat_completions(
         await query_db.commit()
         logger.info(f'新增聊天线程: thread_id={request.thread_id}')
 
-    # 2. 创建模型 + Agent
-    _, agent = await create_agent_and_model(
-        query_db, request.provider_key, request.model,
-        request.enable_thinking, request.enable_web_search,
-        current_user.user.user_id, request.thread_id,
-    )
+    # 2. 提前从数据库获取MCP配置（在generator外部执行DB查询）
+    # 使用空字典而非 None，避免 mcp_tools_context 回退到静态配置加载不需要的 MCP 工具
+    mcp_connections = {}
+    if request.mcp_config_ids:
+        db_configs = await McpconfigDao.get_mcpconfig_by_ids(query_db, request.mcp_config_ids)
+        mcp_connections = build_connections_from_db_configs(db_configs)
+        logger.info(f'加载 {len(mcp_connections)} 个MCP服务器配置: {list(mcp_connections.keys())}')
 
     config = {"configurable": {"thread_id": request.thread_id}}
 
@@ -105,46 +109,57 @@ async def chat_completions(
         attempt = 0
 
         try:
-            # ── 带重试的流式执行 ──
-            while True:
-                try:
-                    async for sse_line in process_stream_chunks(
-                        agent,
-                        input_data,
-                        config,
-                        request_id=request_id,
-                        cancel_event=cancel_event,
-                        enable_thinking=request.enable_thinking,
-                        user_id=current_user.user.user_id,
-                        thread_id=request.thread_id,
-                        log_prefix="[SSE]",
-                        debug_chunks=10,
-                    ):
-                        yield sse_line
-                    # astream 正常结束，跳出重试循环
-                    break
+            # MCP context 包裹整个流式生命周期，确保 session 持久有效
+            async with mcp_tools_context(servers=mcp_connections) as mcp_tools:
+                # Agent 在 MCP context 内创建，工具引用活跃的 session
+                _, agent = await create_agent_and_model(
+                    query_db, request.provider_key, request.model,
+                    request.enable_thinking, request.enable_web_search,
+                    current_user.user.user_id, request.thread_id,
+                    mcp_tools=mcp_tools if mcp_tools else None,
+                )
 
-                except RETRYABLE_EXCEPTIONS as retry_err:
-                    attempt += 1
-                    if attempt > MAX_RETRIES:
-                        raise  # 重试耗尽，抛给外层处理
-                    logger.warning(
-                        f'[SSE] 第 {attempt}/{MAX_RETRIES} 次重试 '
-                        f'({type(retry_err).__name__}): thread_id={request.thread_id}'
-                    )
-                    yield _sse({
-                        "request_id": request_id,
-                        "type": "retry",
-                        "attempt": attempt,
-                        "max_retries": MAX_RETRIES,
-                        "reason": type(retry_err).__name__,
-                    })
-                    await asyncio.sleep(min(2 ** attempt, 8))  # 指数退避: 2s, 4s
+                # ── 带重试的流式执行 ──
+                while True:
+                    try:
+                        async for sse_line in process_stream_chunks(
+                            agent,
+                            input_data,
+                            config,
+                            request_id=request_id,
+                            cancel_event=cancel_event,
+                            enable_thinking=request.enable_thinking,
+                            user_id=current_user.user.user_id,
+                            thread_id=request.thread_id,
+                            log_prefix="[SSE]",
+                            debug_chunks=10,
+                        ):
+                            yield sse_line
+                        # astream 正常结束，跳出重试循环
+                        break
 
-            # ── 检查是否被 interrupt() 中断 ──
-            async for sse_line in check_interrupts(agent, config, request_id, "[SSE]"):
-                yield sse_line
+                    except RETRYABLE_EXCEPTIONS as retry_err:
+                        attempt += 1
+                        if attempt > MAX_RETRIES:
+                            raise  # 重试耗尽，抛给外层处理
+                        logger.warning(
+                            f'[SSE] 第 {attempt}/{MAX_RETRIES} 次重试 '
+                            f'({type(retry_err).__name__}): thread_id={request.thread_id}'
+                        )
+                        yield _sse({
+                            "request_id": request_id,
+                            "type": "retry",
+                            "attempt": attempt,
+                            "max_retries": MAX_RETRIES,
+                            "reason": type(retry_err).__name__,
+                        })
+                        await asyncio.sleep(min(2 ** attempt, 8))  # 指数退避: 2s, 4s
 
+                # ── 检查是否被 interrupt() 中断（仍在 MCP context 内）──
+                async for sse_line in check_interrupts(agent, config, request_id, "[SSE]"):
+                    yield sse_line
+
+            # MCP sessions 已关闭（退出 async with）
             yield "data: [DONE]\n\n"
         except RETRYABLE_EXCEPTIONS:
             logger.error(f'对话超时（已重试 {MAX_RETRIES} 次）: thread_id={request.thread_id}')
@@ -188,14 +203,14 @@ async def answer_question(
     回答 ask_user_question 工具的提问，恢复中断的对话
 
     流程: 获取提供商配置 → 创建模型 → 重建 agent → Command(resume=answers) 恢复执行 → 流式输出
+    支持通过 mcp_config_ids 动态加载 MCP 工具
     """
-    # 1. 创建模型 + Agent
-    _, agent = await create_agent_and_model(
-        query_db, request.provider_key, request.model,
-        request.enable_thinking, request.enable_web_search,
-        current_user.user.user_id, request.thread_id,
-        log_prefix="[Answer] ",
-    )
+    # 1. 提前从数据库获取MCP配置
+    mcp_connections = {}
+    if request.mcp_config_ids:
+        db_configs = await McpconfigDao.get_mcpconfig_by_ids(query_db, request.mcp_config_ids)
+        mcp_connections = build_connections_from_db_configs(db_configs)
+        logger.info(f'[Answer] 加载 {len(mcp_connections)} 个MCP服务器配置: {list(mcp_connections.keys())}')
 
     config = {"configurable": {"thread_id": request.thread_id}}
 
@@ -206,22 +221,31 @@ async def answer_question(
     async def event_stream():
         request_id = str(uuid4())
         try:
-            async for sse_line in process_stream_chunks(
-                agent,
-                Command(resume=request.answers),
-                config,
-                request_id=request_id,
-                cancel_event=cancel_event,
-                enable_thinking=request.enable_thinking,
-                user_id=current_user.user.user_id,
-                thread_id=request.thread_id,
-                log_prefix="[Answer SSE]",
-            ):
-                yield sse_line
+            async with mcp_tools_context(servers=mcp_connections) as mcp_tools:
+                _, agent = await create_agent_and_model(
+                    query_db, request.provider_key, request.model,
+                    request.enable_thinking, request.enable_web_search,
+                    current_user.user.user_id, request.thread_id,
+                    log_prefix="[Answer] ",
+                    mcp_tools=mcp_tools if mcp_tools else None,
+                )
 
-            # 恢复后也需检查是否再次被中断（agent 可能连续提问）
-            async for sse_line in check_interrupts(agent, config, request_id, "[Answer SSE]"):
-                yield sse_line
+                async for sse_line in process_stream_chunks(
+                    agent,
+                    Command(resume=request.answers),
+                    config,
+                    request_id=request_id,
+                    cancel_event=cancel_event,
+                    enable_thinking=request.enable_thinking,
+                    user_id=current_user.user.user_id,
+                    thread_id=request.thread_id,
+                    log_prefix="[Answer SSE]",
+                ):
+                    yield sse_line
+
+                # 恢复后也需检查是否再次被中断（agent 可能连续提问）
+                async for sse_line in check_interrupts(agent, config, request_id, "[Answer SSE]"):
+                    yield sse_line
 
             yield "data: [DONE]\n\n"
         except Exception as e:
