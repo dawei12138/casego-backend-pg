@@ -8,7 +8,8 @@ ENV TZ=Asia/Shanghai \
 
 # 设置工作目录
 WORKDIR /app
-
+RUN npm install -g @playwright/cli@latest
+RUN npm install -g @playwright/mcp
 # 先复制依赖文件，有变化才重新安装
 COPY ./requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt \
