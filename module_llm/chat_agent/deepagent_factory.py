@@ -83,24 +83,58 @@ class _WindowsCompatShellBackend(LocalShellBackend):
             pass
         return None
 
+    def _resolve_skills_path(self, virtual_path: str) -> str | None:
+        """将 /skills/... 虚拟路径解析为真实绝对路径。
+
+        Skills 目录通过 CompositeBackend 路由，shell 后端自身的 _resolve_path
+        无法识别，需单独处理。
+        """
+        normalized = virtual_path.replace("\\", "/")
+        if not normalized.startswith("/skills/"):
+            return None
+
+        relative = normalized[len("/skills/"):]
+        # 防止路径遍历
+        if ".." in relative.split("/"):
+            return None
+
+        # 项目根目录：与 SKILLS_ROOT 定义一致
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        real_path = os.path.join(project_root, SKILLS_ROOT, relative)
+
+        # 文件或其父目录存在即视为有效
+        if os.path.exists(real_path) or os.path.exists(os.path.dirname(real_path)):
+            return real_path
+        return None
+
     def _convert_virtual_paths(self, command: str) -> str:
         """将命令中的虚拟路径转换为工作区真实路径（跨平台）。
 
         virtual_mode=True 时，LLM 使用形如 /filename.py 的虚拟路径，
         需替换为工作区内的真实绝对路径。
 
-        转换策略（复用库自带的 _resolve_path，无需硬编码系统路径排除列表）：
-        - 用 _resolve_path 将虚拟路径解析为工作区内真实路径
+        转换策略：
+        1. /skills/... 路径 → 解析为 SKILLS_ROOT 下的真实路径（优先）
+        2. 其他虚拟路径 → 复用库自带的 _resolve_path 解析为工作区路径
         - 如果解析后的文件/目录（或其父目录）存在 → 替换为真实路径
         - 如果 _resolve_path 抛出异常或解析后不存在 → 保持原样（系统路径）
         """
         if not self.virtual_mode:
             return command
 
+        def _try_resolve(path: str) -> str | None:
+            """尝试解析虚拟路径：先匹配 /skills/，再尝试工作区路径。"""
+            # 优先解析 /skills/ 前缀
+            skills_real = self._resolve_skills_path(path)
+            if skills_real is not None:
+                return skills_real
+            # 降级到工作区路径解析
+            return self._resolve_virtual_to_real(path)
+
         def _replace_path(match: re.Match) -> str:
-            prefix = match.group(1)   # 前置分隔符（空白/引号/等号）
-            path = match.group(2)     # /filename 部分
-            real = self._resolve_virtual_to_real(path)
+            prefix = match.group(1)  # 前置分隔符（空白/引号/等号）
+            path = match.group(2)  # /filename 部分
+            real = _try_resolve(path)
             if real is not None:
                 return f'{prefix}{real.replace(chr(92), "/")}'
             return match.group(0)
@@ -115,7 +149,7 @@ class _WindowsCompatShellBackend(LocalShellBackend):
         # 替换：命令以 /path 开头的情况
         def _replace_leading_path(match: re.Match) -> str:
             path = match.group(0)
-            real = self._resolve_virtual_to_real(path)
+            real = _try_resolve(path)
             if real is not None:
                 return real.replace(chr(92), '/')
             return path
@@ -153,8 +187,8 @@ class _WindowsCompatShellBackend(LocalShellBackend):
                 check=False,
                 shell=True,
                 capture_output=True,
-                encoding='utf-8',   # 强制 UTF-8，避免 Windows 默认 GBK 解码崩溃
-                errors='replace',   # 无法解码的字节用 ? 替代，不抛异常
+                encoding='utf-8',  # 强制 UTF-8，避免 Windows 默认 GBK 解码崩溃
+                errors='replace',  # 无法解码的字节用 ? 替代，不抛异常
                 timeout=effective_timeout,
                 env=self._env,
                 cwd=str(self.cwd),
@@ -205,6 +239,7 @@ class _WindowsCompatShellBackend(LocalShellBackend):
                 exit_code=1,
                 truncated=False,
             )
+
 
 # 全局工作区根目录（与原 UserThreadFilesystemBackend 保持一致）
 WORKSPACE_ROOT = os.path.join("CaseGo", "agent_workspace")

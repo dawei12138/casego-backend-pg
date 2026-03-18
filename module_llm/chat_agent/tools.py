@@ -15,7 +15,9 @@ Agent 通用工具集 - 适配 deepagents
 """
 import json
 import os
+import platform
 from datetime import datetime
+from pathlib import Path
 from typing import Literal, Optional
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
@@ -23,6 +25,10 @@ from pydantic import BaseModel, Field
 from config.env import LLMConfig
 from module_llm.chat_agent.mcp.loader import load_mcp_tools
 from utils.log_util import logger
+
+# Skills 虚拟路径前缀与真实根目录（与 deepagent_factory 保持一致）
+_SKILLS_VIRTUAL_PREFIX = "/skills/"
+_SKILLS_ROOT = os.path.join("CaseGo", "skills")
 
 
 # ── AskUserQuestion 工具的输入模式 ──
@@ -126,6 +132,42 @@ def ask_user_question(questions: list) -> str:
     if isinstance(response, dict):
         return json.dumps(response, ensure_ascii=False)
     return str(response)
+
+
+@tool
+def resolve_skills_path(virtual_path: str) -> str:
+    """将 /skills/ 虚拟路径解析为操作系统上的真实绝对路径。
+
+    Skills 目录通过虚拟挂载对 Agent 可见，但 shell 命令需要真实路径才能访问文件。
+    此工具将虚拟路径转换为当前操作系统的绝对路径，自动处理 Windows/Linux 差异。
+
+    Args:
+        virtual_path: 以 /skills/ 开头的虚拟路径，例如 /skills/playwright-cli/cli.config.json
+    """
+    # 标准化输入：去除首尾空白，统一正斜杠
+    cleaned = virtual_path.strip().replace("\\", "/")
+
+    # 校验必须以 /skills/ 开头
+    if not cleaned.startswith(_SKILLS_VIRTUAL_PREFIX):
+        return f"错误: 路径必须以 {_SKILLS_VIRTUAL_PREFIX} 开头，收到: {virtual_path}"
+
+    # 提取 /skills/ 之后的相对部分
+    relative = cleaned[len(_SKILLS_VIRTUAL_PREFIX):]
+
+    # 防止路径遍历攻击
+    if ".." in relative.split("/"):
+        return f"错误: 路径中不允许包含 '..'，收到: {virtual_path}"
+
+    # 构建真实绝对路径：项目根目录 / CaseGo/skills / 相对路径
+    project_root = Path(__file__).resolve().parent.parent.parent  # tools.py -> chat_agent -> module_llm -> 项目根
+    real_path = project_root / _SKILLS_ROOT / relative
+
+    # 检查文件/目录是否存在
+    if not real_path.exists():
+        return f"警告: 路径不存在 - {real_path}"
+
+    # 返回当前操作系统格式的绝对路径
+    return str(real_path)
 
 
 def get_builtin_tools(enable_web_search: bool = False) -> list:
