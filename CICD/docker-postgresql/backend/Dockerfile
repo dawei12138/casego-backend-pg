@@ -18,8 +18,10 @@ RUN echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesourc
 
 # 安装 Node.js
 RUN apt-get update && \
-    apt-get install -y nodejs
-
+    apt-get install -y nodejs && \
+    apt-get install -y --no-install-recommends rsync && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
