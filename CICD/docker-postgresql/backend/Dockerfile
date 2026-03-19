@@ -5,6 +5,8 @@ ENV TZ=Asia/Shanghai \
     PYTHONUNBUFFERED=1 \
     APP_ENV=prod
 
+RUN rm -f /etc/apt/sources.list.d/nodesource.list || true
+
 RUN apt-get update && apt-get install -y ca-certificates curl gnupg
 
 # 导入 NodeSource GPG key（新版安全方式）
