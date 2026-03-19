@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config.database_ping import DatabaseTestUtil
 from config.env import AppConfig
-from config.get_db import init_create_table
+from config.get_db import init_create_table, get_db
 from config.get_redis import RedisUtil, RedisProxy
 from config.get_scheduler import SchedulerUtil
 from config.get_websocket import websocket_manager
@@ -72,6 +72,7 @@ from module_app.websocket import agentTransportController
 
 from module_generator.controller.gen_controller import genController
 from module_llm.chat_mcp_config.controller.mcpconfig_controller import mcpconfigController
+from module_llm.skills.controller.skill_controller import skillController
 from module_llm.chat_thread.controller.thread_controller import threadController
 
 from module_llm.llm_provider.controller.provider_config_controller import provider_configController
@@ -105,6 +106,16 @@ async def lifespan(app: FastAPI):
     await RedisUtil.init_sys_config(app.state.redis)
     await SchedulerUtil.init_system_scheduler()
     await DatabaseTestUtil.run_full_connection_test(app)
+
+    # 从数据库同步技能到文件系统
+    from module_llm.skills.service.skill_sync_service import SkillSyncService
+    async for db in get_db():
+        try:
+            await SkillSyncService.sync_all(db)
+        except Exception as e:
+            logger.warning(f'技能同步失败（不影响启动）: {e}')
+        finally:
+            await db.close()
 
     logger.info(f'{AppConfig.app_name}启动成功')
     yield
@@ -220,6 +231,7 @@ controller_list = [
     {'router': chatController, 'tags': ['大模型对话']},
     {'router': workspaceController, 'tags': ['AI工作区文件管理']},
     {'router': mcpconfigController, 'tags': ['AImcp服务配置']},
+    {'router': skillController, 'tags': ['AI技能管理']},
     # {'router': testController, 'tags': ['测试的']},
 ]
 

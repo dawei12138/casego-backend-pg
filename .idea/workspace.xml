@@ -4,11 +4,20 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="851b233a-776a-4093-a81e-488998e0c650" name="更改" comment="```&#10;feat(chat-agent): 支持动态加载MCP工具配置&#10;&#10;- 新增mcp_config_ids字段到ChatVO，支持传入MCP服务器配置ID列表- 实现从数据库动态获取MCP配置的功能，支持stdio和HTTP类型连接&#10;- 使用async context manager管理MCP会话生命周期，确保session持久有效- 在流式对话过程中注入MCP工具，支持需要状态保持的场景（如Playwright浏览器）&#10;- 优化MCP配置加载逻辑，支持重名处理和环境变量合并- 添加MCP服务器配置查询接口，便于前端获取可用配置列表&#10;&#10;fix(chat-controller):重构MCP工具加载时机和上下文管理&#10;&#10;- 将MCP配置数据库查询移至generator外部，避免重复查询&#10;- 使用mcp_tools_context包裹整个流式生命周期，确保session持续有效&#10;-修复环境变量PATH覆盖问题，采用拼接方式保留系统路径&#10;- 优化重试机制，确保在MCP上下文内正确处理中断检查&#10;&#10;refactor(system-prompt): 简化默认系统提示词内容&#10;&#10;- 移除冗余的执行原则和策略说明- 清理过时的调试和任务规划策略内容&#10;- 优化命令执行规则和文件操作指导&#10;- 使系统提示词更加简洁明了，专注于核心执行流程&#10;&#10;style(claude-config): 扩展bash工具权限配置- 添加node和npx命令位置查询权限&#10;- 更新工具安全配置，支持前端构建相关命令&#10;&#10;chore(generator):优化SQL模板语法兼容性&#10;&#10;- 修复PostgreSQL语法兼容性问题- 使用DO语句块和变量声明替代多条独立INSERT语句&#10;- 确保菜单ID正确关联父子关系&#10;&#10;perf(stream-helpers): 优化模型配置和日志输出- 统一设置max_input_tokens限制，触发自动压缩机制&#10;- 条件化控制调试日志输出，减少生产环境日志量&#10;- 支持外部传入MCP工具列表，灵活合并内置工具chore(docker): 在Dockerfile中添加Playwright CLI依赖&#10;&#10;- 安装@playwright/cli和@playwright/mcp全局包```">
+    <list default="true" id="851b233a-776a-4093-a81e-488998e0c650" name="更改" comment="```&#10;feat(chat-agent): 支持 /skills/ 虚拟路径解析为真实路径&#10;&#10;- 新增 _resolve_skills_path 方法处理 /skills/... 虚拟路径到真实绝对路径的转换&#10;-优化 _convert_virtual_paths 方法，优先处理 /skills/ 前缀路径，再处理工作区路径&#10;- 在 tools.py 中添加 resolve_skills_path 工具函数，供 Agent 将虚拟路径转换为系统真实路径&#10;- 防止路径遍历攻击，验证 .. 在路径中的存在&#10;- 更新系统提示词，明确所有操作应在 / 开头的虚拟挂载绝对路径下完成&#10;-修复虚拟路径转换逻辑，确保 shell 命令能正确访问 Skills 目录文件&#10;```">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/deepagent_factory.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/deepagent_factory.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/prompts/default_system_prompt.txt" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/prompts/default_system_prompt.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/tools.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CICD/docker-postgresql/backend/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/CICD/docker-postgresql/backend/Dockerfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CaseGo/skills/frontend-design/SKILL.md" beforeDir="false" afterPath="$PROJECT_DIR$/CaseGo/skills/frontend-design/SKILL.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CaseGo/skills/playwright-cli/SKILL.md" beforeDir="false" afterPath="$PROJECT_DIR$/CaseGo/skills/playwright-cli/SKILL.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CaseGo/skills/playwright-cli/references/request-mocking.md" beforeDir="false" afterPath="$PROJECT_DIR$/CaseGo/skills/playwright-cli/references/request-mocking.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CaseGo/skills/playwright-cli/references/running-code.md" beforeDir="false" afterPath="$PROJECT_DIR$/CaseGo/skills/playwright-cli/references/running-code.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CaseGo/skills/playwright-cli/references/session-management.md" beforeDir="false" afterPath="$PROJECT_DIR$/CaseGo/skills/playwright-cli/references/session-management.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CaseGo/skills/playwright-cli/references/storage-state.md" beforeDir="false" afterPath="$PROJECT_DIR$/CaseGo/skills/playwright-cli/references/storage-state.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CaseGo/skills/playwright-cli/references/test-generation.md" beforeDir="false" afterPath="$PROJECT_DIR$/CaseGo/skills/playwright-cli/references/test-generation.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CaseGo/skills/playwright-cli/references/tracing.md" beforeDir="false" afterPath="$PROJECT_DIR$/CaseGo/skills/playwright-cli/references/tracing.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CaseGo/skills/playwright-cli/references/video-recording.md" beforeDir="false" afterPath="$PROJECT_DIR$/CaseGo/skills/playwright-cli/references/video-recording.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CaseGo/skills/prd/SKILL.md" beforeDir="false" afterPath="$PROJECT_DIR$/CaseGo/skills/prd/SKILL.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/server.py" beforeDir="false" afterPath="$PROJECT_DIR$/server.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -87,6 +96,7 @@
       <updated>1773505515885</updated>
       <workItem from="1773505517031" duration="8697000" />
       <workItem from="1773647660539" duration="30321000" />
+      <workItem from="1773880414744" duration="634000" />
     </task>
     <task id="LOCAL-00001" summary="初始化">
       <created>1773563647192</created>
@@ -172,7 +182,14 @@
       <option name="project" value="LOCAL" />
       <updated>1773800925148</updated>
     </task>
-    <option name="localTasksCounter" value="13" />
+    <task id="LOCAL-00013" summary="```&#10;feat(chat-agent): 支持 /skills/ 虚拟路径解析为真实路径&#10;&#10;- 新增 _resolve_skills_path 方法处理 /skills/... 虚拟路径到真实绝对路径的转换&#10;-优化 _convert_virtual_paths 方法，优先处理 /skills/ 前缀路径，再处理工作区路径&#10;- 在 tools.py 中添加 resolve_skills_path 工具函数，供 Agent 将虚拟路径转换为系统真实路径&#10;- 防止路径遍历攻击，验证 .. 在路径中的存在&#10;- 更新系统提示词，明确所有操作应在 / 开头的虚拟挂载绝对路径下完成&#10;-修复虚拟路径转换逻辑，确保 shell 命令能正确访问 Skills 目录文件&#10;```">
+      <created>1773806668364</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1773806668364</updated>
+    </task>
+    <option name="localTasksCounter" value="14" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -195,9 +212,10 @@
     <MESSAGE value="```&#10;feat(deepagent): 添加搜索子Agent和MCP配置管理功能&#10;&#10;- 新增搜索子Agent：专门负责互联网搜索任务，独立于主Agent的enable_web_search开关，  主Agent可通过task(name=&quot;search-agent&quot;, task=&quot;...&quot;)委派搜索任务- 实现完整的MCP服务器配置管理：包括新增、编辑、删除、查询等CRUD操作，  支持stdio/streamable_http/sse/websocket四种传输类型&#10;&#10;- 重构deepagent_factory.py：配置子Agent列表，始终注册搜索子Agent，&#10;  使主Agent无论是否开启联网搜索都能委派搜索任务- 添加mcpconfig_controller.py：提供RESTful API接口，支持MCP服务器配置的 分页查询、新增、修改、删除、详情查询和导出功能&#10;&#10;- 设计LlmMcpConfig数据模型：持久化MCP服务器连接配置信息到数据库，  包含服务器基础信息、传输配置、扩展参数等完整字段&#10;&#10;- 实现服务层和数据访问层：完成业务逻辑处理和数据库操作封装&#10;```" />
     <MESSAGE value="```&#10;feat(chat-agent): 支持动态加载MCP工具配置&#10;&#10;- 新增mcp_config_ids字段到ChatVO，支持传入MCP服务器配置ID列表&#10;- 实现从数据库动态获取MCP配置的功能，支持stdio和HTTP类型连接&#10;- 使用async context manager管理MCP会话生命周期，确保session持久有效&#10;- 在流式对话过程中注入MCP工具，支持需要状态保持的场景（如Playwright浏览器）&#10;-优化MCP配置加载逻辑，支持重名处理和环境变量合并- 添加MCP服务器配置查询接口，便于前端获取可用配置列表&#10;&#10;fix(chat-controller):重构MCP工具加载时机和上下文管理&#10;&#10;- 将MCP配置数据库查询移至generator外部，避免重复查询&#10;- 使用mcp_tools_context包裹整个流式生命周期，确保session持续有效&#10;-修复环境变量PATH覆盖问题，采用拼接方式保留系统路径&#10;-优化重试机制，确保在MCP上下文内正确处理中断检查&#10;&#10;refactor(system-prompt): 简化默认系统提示词内容&#10;&#10;- 移除冗余的执行原则和策略说明- 清理过时的调试和任务规划策略内容- 优化命令执行规则和文件操作指导&#10;-使系统提示词更加简洁明了，专注于核心执行流程&#10;&#10;style(claude-config): 扩展bash工具权限配置&#10;&#10;- 添加node和npx命令位置查询权限&#10;- 更新工具安全配置，支持前端构建相关命令&#10;&#10;chore(generator): 优化SQL模板语法兼容性- 修复PostgreSQL语法兼容性问题- 使用DO语句块和变量声明替代多条独立INSERT语句&#10;- 确保菜单ID正确关联父子关系&#10;&#10;perf(stream-helpers):优化模型配置和日志输出&#10;&#10;- 统一设置max_input_tokens限制，触发自动压缩机制&#10;- 条件化控制调试日志输出，减少生产环境日志量&#10;- 支持外部传入MCP工具列表，灵活合并内置工具```" />
     <MESSAGE value="```&#10;feat(chat-agent): 支持动态加载MCP工具配置&#10;&#10;- 新增mcp_config_ids字段到ChatVO，支持传入MCP服务器配置ID列表- 实现从数据库动态获取MCP配置的功能，支持stdio和HTTP类型连接&#10;- 使用async context manager管理MCP会话生命周期，确保session持久有效- 在流式对话过程中注入MCP工具，支持需要状态保持的场景（如Playwright浏览器）&#10;- 优化MCP配置加载逻辑，支持重名处理和环境变量合并- 添加MCP服务器配置查询接口，便于前端获取可用配置列表&#10;&#10;fix(chat-controller):重构MCP工具加载时机和上下文管理&#10;&#10;- 将MCP配置数据库查询移至generator外部，避免重复查询&#10;- 使用mcp_tools_context包裹整个流式生命周期，确保session持续有效&#10;-修复环境变量PATH覆盖问题，采用拼接方式保留系统路径&#10;- 优化重试机制，确保在MCP上下文内正确处理中断检查&#10;&#10;refactor(system-prompt): 简化默认系统提示词内容&#10;&#10;- 移除冗余的执行原则和策略说明- 清理过时的调试和任务规划策略内容&#10;- 优化命令执行规则和文件操作指导&#10;- 使系统提示词更加简洁明了，专注于核心执行流程&#10;&#10;style(claude-config): 扩展bash工具权限配置- 添加node和npx命令位置查询权限&#10;- 更新工具安全配置，支持前端构建相关命令&#10;&#10;chore(generator):优化SQL模板语法兼容性&#10;&#10;- 修复PostgreSQL语法兼容性问题- 使用DO语句块和变量声明替代多条独立INSERT语句&#10;- 确保菜单ID正确关联父子关系&#10;&#10;perf(stream-helpers): 优化模型配置和日志输出- 统一设置max_input_tokens限制，触发自动压缩机制&#10;- 条件化控制调试日志输出，减少生产环境日志量&#10;- 支持外部传入MCP工具列表，灵活合并内置工具chore(docker): 在Dockerfile中添加Playwright CLI依赖&#10;&#10;- 安装@playwright/cli和@playwright/mcp全局包```" />
-    <option name="LAST_COMMIT_MESSAGE" value="```&#10;feat(chat-agent): 支持动态加载MCP工具配置&#10;&#10;- 新增mcp_config_ids字段到ChatVO，支持传入MCP服务器配置ID列表- 实现从数据库动态获取MCP配置的功能，支持stdio和HTTP类型连接&#10;- 使用async context manager管理MCP会话生命周期，确保session持久有效- 在流式对话过程中注入MCP工具，支持需要状态保持的场景（如Playwright浏览器）&#10;- 优化MCP配置加载逻辑，支持重名处理和环境变量合并- 添加MCP服务器配置查询接口，便于前端获取可用配置列表&#10;&#10;fix(chat-controller):重构MCP工具加载时机和上下文管理&#10;&#10;- 将MCP配置数据库查询移至generator外部，避免重复查询&#10;- 使用mcp_tools_context包裹整个流式生命周期，确保session持续有效&#10;-修复环境变量PATH覆盖问题，采用拼接方式保留系统路径&#10;- 优化重试机制，确保在MCP上下文内正确处理中断检查&#10;&#10;refactor(system-prompt): 简化默认系统提示词内容&#10;&#10;- 移除冗余的执行原则和策略说明- 清理过时的调试和任务规划策略内容&#10;- 优化命令执行规则和文件操作指导&#10;- 使系统提示词更加简洁明了，专注于核心执行流程&#10;&#10;style(claude-config): 扩展bash工具权限配置- 添加node和npx命令位置查询权限&#10;- 更新工具安全配置，支持前端构建相关命令&#10;&#10;chore(generator):优化SQL模板语法兼容性&#10;&#10;- 修复PostgreSQL语法兼容性问题- 使用DO语句块和变量声明替代多条独立INSERT语句&#10;- 确保菜单ID正确关联父子关系&#10;&#10;perf(stream-helpers): 优化模型配置和日志输出- 统一设置max_input_tokens限制，触发自动压缩机制&#10;- 条件化控制调试日志输出，减少生产环境日志量&#10;- 支持外部传入MCP工具列表，灵活合并内置工具chore(docker): 在Dockerfile中添加Playwright CLI依赖&#10;&#10;- 安装@playwright/cli和@playwright/mcp全局包```" />
+    <MESSAGE value="```&#10;feat(chat-agent): 支持 /skills/ 虚拟路径解析为真实路径&#10;&#10;- 新增 _resolve_skills_path 方法处理 /skills/... 虚拟路径到真实绝对路径的转换&#10;-优化 _convert_virtual_paths 方法，优先处理 /skills/ 前缀路径，再处理工作区路径&#10;- 在 tools.py 中添加 resolve_skills_path 工具函数，供 Agent 将虚拟路径转换为系统真实路径&#10;- 防止路径遍历攻击，验证 .. 在路径中的存在&#10;- 更新系统提示词，明确所有操作应在 / 开头的虚拟挂载绝对路径下完成&#10;-修复虚拟路径转换逻辑，确保 shell 命令能正确访问 Skills 目录文件&#10;```" />
+    <option name="LAST_COMMIT_MESSAGE" value="```&#10;feat(chat-agent): 支持 /skills/ 虚拟路径解析为真实路径&#10;&#10;- 新增 _resolve_skills_path 方法处理 /skills/... 虚拟路径到真实绝对路径的转换&#10;-优化 _convert_virtual_paths 方法，优先处理 /skills/ 前缀路径，再处理工作区路径&#10;- 在 tools.py 中添加 resolve_skills_path 工具函数，供 Agent 将虚拟路径转换为系统真实路径&#10;- 防止路径遍历攻击，验证 .. 在路径中的存在&#10;- 更新系统提示词，明确所有操作应在 / 开头的虚拟挂载绝对路径下完成&#10;-修复虚拟路径转换逻辑，确保 shell 命令能正确访问 Skills 目录文件&#10;```" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/casego_backend_pg$app.coverage" NAME="app 覆盖结果" MODIFIED="1773806389513" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/casego_backend_pg$app.coverage" NAME="app 覆盖结果" MODIFIED="1773880427969" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
 </project>
