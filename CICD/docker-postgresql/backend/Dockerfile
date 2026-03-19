@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir -r /tmp/app_src/requirements.txt \
     --trusted-host mirrors.aliyun.com \
     --timeout=120 \
     --retries=5 \
-
+RUN apt update
 RUN apt install rsync
 
 # 代码先放到 /tmp/app_src，不放 /app（防止被 volume 覆盖）
