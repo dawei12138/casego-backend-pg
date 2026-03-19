@@ -4,26 +4,26 @@ ENV TZ=Asia/Shanghai \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     APP_ENV=prod
-
-RUN rm -f /etc/apt/sources.list.d/nodesource.list || true
-
-RUN apt-get update && apt-get install -y ca-certificates curl gnupg
-
-# 导入 NodeSource GPG key（新版安全方式）
-RUN mkdir -p /etc/apt/keyrings \
- && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
-    | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-
-# ⚠️ 这里改成 node_22.x
-RUN echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" \
-    > /etc/apt/sources.list.d/nodesource.list
-
-# 安装 Node.js
-RUN apt-get update && \
-    apt-get install -y nodejs && \
-    apt-get install -y --no-install-recommends rsync && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# 解决nodejs证书信任问题
+#RUN rm -f /etc/apt/sources.list.d/nodesource.list || true
+#
+#RUN apt-get update && apt-get install -y ca-certificates curl gnupg
+#
+## 导入 NodeSource GPG key（新版安全方式）
+#RUN mkdir -p /etc/apt/keyrings \
+# && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+#    | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+#
+## ⚠️ 这里改成 node_22.x
+#RUN echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" \
+#    > /etc/apt/sources.list.d/nodesource.list
+#
+## 安装 Node.js
+#RUN apt-get update && \
+#    apt-get install -y nodejs && \
+#    apt-get install -y --no-install-recommends rsync && \
+#    apt-get clean && \
+#    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

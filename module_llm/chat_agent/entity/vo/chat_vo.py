@@ -102,6 +102,7 @@ class TurnEventModel(BaseModel):
     args: Optional[dict] = Field(default=None, description='工具调用参数(tool_call/tool_result类型)')
     call_id: Optional[str] = Field(default=None, description='工具调用ID(tool_call/tool_result类型)')
     result: Optional[Any] = Field(default=None, description='工具执行结果(tool_result类型)')
+    timestamp: Optional[str] = Field(default=None, description='事件时间戳(ISO-8601 UTC)')
 
 
 class ConversationTurnModel(BaseModel):
@@ -112,6 +113,7 @@ class ConversationTurnModel(BaseModel):
     user_message: str = Field(description='用户输入内容')
     attachments: Optional[List[AttachmentMeta]] = Field(default=None, description='用户附件元数据')
     events: List[TurnEventModel] = Field(default_factory=list, description='AI响应事件列表')
+    timestamp: Optional[str] = Field(default=None, description='该轮对话的时间戳(ISO-8601 UTC)')
 
 
 class ChatHistoryResponse(BaseModel):

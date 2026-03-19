@@ -88,11 +88,18 @@ class WorkspaceService:
         for item in sorted(workspace.rglob('*')):
             rel_path = str(item.relative_to(workspace)).replace('\\', '/')
             stat = item.stat()
+            is_file = item.is_file()
+            mime_type = None
+            if is_file:
+                mime_type, _ = mimetypes.guess_type(str(item))
+                mime_type = mime_type or 'application/octet-stream'
             entries.append(FileEntryModel(
                 name=item.name,
                 path=rel_path,
                 type=FileType.DIRECTORY if item.is_dir() else FileType.FILE,
-                size=stat.st_size if item.is_file() else 0,
+                size=stat.st_size if is_file else 0,
+                mime_type=mime_type,
+                created_time=datetime.fromtimestamp(stat.st_ctime),
                 modified_time=datetime.fromtimestamp(stat.st_mtime),
             ))
 

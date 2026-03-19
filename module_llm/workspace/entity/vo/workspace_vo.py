@@ -20,6 +20,8 @@ class FileEntryModel(BaseModel):
     path: str = Field(description='相对于线程工作区根目录的路径')
     type: FileType = Field(description='类型: file / directory')
     size: int = Field(default=0, description='文件大小(字节), 目录为0')
+    mime_type: Optional[str] = Field(default=None, description='MIME类型, 目录为null')
+    created_time: datetime = Field(description='创建时间')
     modified_time: datetime = Field(description='最后修改时间')
 
 

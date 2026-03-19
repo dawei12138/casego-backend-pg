@@ -5,7 +5,8 @@
 import asyncio
 import json
 import math
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Optional
 from uuid import uuid4
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -258,7 +259,34 @@ async def answer_question(
     return make_sse_response(event_stream())
 
 
-def _group_messages_to_turns(messages: list) -> list[ConversationTurnModel]:
+def _get_msg_timestamp(msg, ts_map: dict[str, str] | None = None) -> Optional[str]:
+    """
+    获取消息时间戳（ISO-8601 UTC）。
+
+    优先从 ts_map（checkpoint 历史构建的 message_id→created_at 映射）中查找，
+    其次尝试从消息自身的 response_metadata / additional_kwargs 中提取。
+    """
+    msg_id = getattr(msg, 'id', None)
+    if ts_map and msg_id and msg_id in ts_map:
+        return ts_map[msg_id]
+
+    # response_metadata 里可能有 created_at / timestamp
+    meta = getattr(msg, 'response_metadata', {}) or {}
+    ts = meta.get('created_at') or meta.get('timestamp')
+    if ts:
+        return str(ts)
+    # additional_kwargs 里可能有
+    ak = getattr(msg, 'additional_kwargs', {}) or {}
+    ts = ak.get('created_at') or ak.get('timestamp')
+    if ts:
+        return str(ts)
+    return None
+
+
+def _group_messages_to_turns(
+    messages: list,
+    ts_map: dict[str, str] | None = None,
+) -> list[ConversationTurnModel]:
     """
     将 LangChain 消息列表按轮次分组，生成与 SSE 事件格式一致的 turn 列表。
 
@@ -307,6 +335,7 @@ def _group_messages_to_turns(messages: list) -> list[ConversationTurnModel]:
                 user_message=user_text,
                 attachments=turn_attachments,
                 events=[],
+                timestamp=_get_msg_timestamp(msg, ts_map),
             )
             turns.append(current_turn)
             pending_tool_calls = {}
@@ -318,6 +347,7 @@ def _group_messages_to_turns(messages: list) -> list[ConversationTurnModel]:
 
         if isinstance(msg, AIMessage):
             additional_kwargs = getattr(msg, 'additional_kwargs', {})
+            msg_ts = _get_msg_timestamp(msg, ts_map)
 
             # 1. 提取思考内容
             reasoning = (
@@ -326,7 +356,7 @@ def _group_messages_to_turns(messages: list) -> list[ConversationTurnModel]:
                 or additional_kwargs.get("thought")
             )
             if reasoning:
-                current_turn.events.append(TurnEventModel(type="thinking", content=reasoning))
+                current_turn.events.append(TurnEventModel(type="thinking", content=reasoning, timestamp=msg_ts))
 
             # 2. 处理 content
             if isinstance(msg.content, list):
@@ -335,11 +365,11 @@ def _group_messages_to_turns(messages: list) -> list[ConversationTurnModel]:
                     if not isinstance(block, dict):
                         continue
                     if block.get("type") == "thinking" and block.get("thinking"):
-                        current_turn.events.append(TurnEventModel(type="thinking", content=block["thinking"]))
+                        current_turn.events.append(TurnEventModel(type="thinking", content=block["thinking"], timestamp=msg_ts))
                     elif block.get("type") == "text" and block.get("text"):
-                        current_turn.events.append(TurnEventModel(type="content", content=block["text"]))
+                        current_turn.events.append(TurnEventModel(type="content", content=block["text"], timestamp=msg_ts))
             elif msg.content:
-                current_turn.events.append(TurnEventModel(type="content", content=msg.content))
+                current_turn.events.append(TurnEventModel(type="content", content=msg.content, timestamp=msg_ts))
 
             # 3. 处理 tool_calls
             if hasattr(msg, 'tool_calls') and msg.tool_calls:
@@ -355,11 +385,13 @@ def _group_messages_to_turns(messages: list) -> list[ConversationTurnModel]:
                         tool=tc_name,
                         call_id=call_id,
                         args=tc_args,
+                        timestamp=msg_ts,
                     ))
 
         elif isinstance(msg, ToolMessage):
             tool_call_id = getattr(msg, 'tool_call_id', '')
             tool_name = getattr(msg, 'name', '')
+            msg_ts = _get_msg_timestamp(msg, ts_map)
 
             # 从缓存中匹配 args
             tc_info = pending_tool_calls.pop(tool_call_id, None)
@@ -371,6 +403,7 @@ def _group_messages_to_turns(messages: list) -> list[ConversationTurnModel]:
                 call_id=tool_call_id,
                 args=tool_args,
                 result=msg.content,
+                timestamp=msg_ts,
             ))
 
     return turns
@@ -431,8 +464,31 @@ async def get_chat_history(
         if not all_messages:
             return ResponseUtil.success(data=empty_response.model_dump(by_alias=True))
 
+        # 遍历 checkpoint 历史，构建 message_id → created_at 映射
+        # 每个 snapshot 记录了当时累积的所有消息，通过对比前后差异找到「新增消息」对应的时间戳
+        ts_map: dict[str, str] = {}
+        prev_ids: set[str] = set()
+        history_snapshots = []
+        async for snapshot in graph.aget_state_history(config):
+            history_snapshots.append(snapshot)
+
+        # aget_state_history 按时间倒序返回，反转为正序以便逐步对比
+        for snapshot in reversed(history_snapshots):
+            snap_ts = snapshot.created_at
+            if not snap_ts:
+                continue
+            snap_msgs = (snapshot.values or {}).get("messages", [])
+            cur_ids = set()
+            for m in snap_msgs:
+                mid = getattr(m, 'id', None)
+                if mid:
+                    cur_ids.add(mid)
+                    if mid not in prev_ids:
+                        ts_map[mid] = snap_ts
+            prev_ids = cur_ids
+
         # 按轮次分组
-        all_turns = _group_messages_to_turns(all_messages)
+        all_turns = _group_messages_to_turns(all_messages, ts_map=ts_map)
         total = len(all_turns)
 
         if total == 0:

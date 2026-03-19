@@ -4,7 +4,16 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="851b233a-776a-4093-a81e-488998e0c650" name="更改" comment="```&#10;build(docker): 优化Dockerfile构建流程和解决volume覆盖问题- 修改Dockerfile将代码先复制到/tmp/app_src目录，避免被volume覆盖&#10;- 在start.sh中添加rsync同步代码到/app目录的逻辑- 安装rsync工具用于代码同步- 更新Dockerfile中的依赖安装路径和参数配置&#10;- 简化Dockerfile注释并优化构建步骤顺序&#10;```" />
+    <list default="true" id="851b233a-776a-4093-a81e-488998e0c650" name="更改" comment="```&#10;fix(backend): 移除旧的NodeSource源列表文件&#10;&#10;移除了过时的/etc/apt/sources.list.d/nodesource.list文件，&#10;以避免在Docker构建过程中出现APT源冲突问题```">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CICD/docker-postgresql/backend/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/CICD/docker-postgresql/backend/Dockerfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/controller/chat_controller.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/controller/chat_controller.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/controller/stream_helpers.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/controller/stream_helpers.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/entity/vo/chat_vo.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/entity/vo/chat_vo.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/prompts/default_system_prompt.txt" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/prompts/default_system_prompt.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/workspace/entity/vo/workspace_vo.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/workspace/entity/vo/workspace_vo.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/workspace/service/workspace_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/workspace/service/workspace_service.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -83,7 +92,7 @@
       <workItem from="1773505517031" duration="8697000" />
       <workItem from="1773647660539" duration="30321000" />
       <workItem from="1773880414744" duration="1865000" />
-      <workItem from="1773911073803" duration="1530000" />
+      <workItem from="1773911073803" duration="13036000" />
     </task>
     <task id="LOCAL-00001" summary="初始化">
       <created>1773563647192</created>
@@ -197,7 +206,42 @@
       <option name="project" value="LOCAL" />
       <updated>1773912326594</updated>
     </task>
-    <option name="localTasksCounter" value="17" />
+    <task id="LOCAL-00017" summary="```&#10;build(docker): 优化Dockerfile构建流程和解决volume覆盖问题&#10;&#10;- 修改Dockerfile将代码先复制到/tmp/app_src目录，避免被volume覆盖&#10;- 在start.sh中添加rsync同步代码到/app目录的逻辑&#10;- 安装rsync工具用于代码同步&#10;- 更新Dockerfile中的依赖安装路径和参数配置&#10;- 简化Dockerfile注释并优化构建步骤顺序&#10;```">
+      <created>1773912733088</created>
+      <option name="number" value="00017" />
+      <option name="presentableId" value="LOCAL-00017" />
+      <option name="project" value="LOCAL" />
+      <updated>1773912733088</updated>
+    </task>
+    <task id="LOCAL-00018" summary="```&#10;feat(backend): 在Dockerfile中优化rsync安装流程&#10;&#10;- 更新apt并安装rsync及其他系统依赖&#10;- 清理apt缓存以减少镜像大小&#10;- 移除重复的apt update和rsync安装命令&#10;```">
+      <created>1773912895190</created>
+      <option name="number" value="00018" />
+      <option name="presentableId" value="LOCAL-00018" />
+      <option name="project" value="LOCAL" />
+      <updated>1773912895191</updated>
+    </task>
+    <task id="LOCAL-00019" summary="```&#10;feat(backend): 在 Dockerfile 中添加 Node.js 22.x 支持&#10;&#10;- 添加 NodeSource GPG key 导入以确保包的安全性&#10;- 配置 Node.js 22.x 的 APT仓库源&#10;- 安装 Node.js 而不是 rsync&#10;- 更新系统包管理器并清理缓存```">
+      <created>1773913204407</created>
+      <option name="number" value="00019" />
+      <option name="presentableId" value="LOCAL-00019" />
+      <option name="project" value="LOCAL" />
+      <updated>1773913204407</updated>
+    </task>
+    <task id="LOCAL-00020" summary="```&#10;feat(backend): 在 Dockerfile 中添加 Node.js 22.x 支持&#10;&#10;- 添加 NodeSource GPG key 导入以确保包的安全性&#10;- 配置 Node.js 22.x 的 APT仓库源&#10;- 安装 Node.js 而不是 rsync&#10;- 更新系统包管理器并清理缓存```">
+      <created>1773913318028</created>
+      <option name="number" value="00020" />
+      <option name="presentableId" value="LOCAL-00020" />
+      <option name="project" value="LOCAL" />
+      <updated>1773913318028</updated>
+    </task>
+    <task id="LOCAL-00021" summary="```&#10;fix(backend): 移除旧的NodeSource源列表文件&#10;&#10;移除了过时的/etc/apt/sources.list.d/nodesource.list文件，&#10;以避免在Docker构建过程中出现APT源冲突问题```">
+      <created>1773913580854</created>
+      <option name="number" value="00021" />
+      <option name="presentableId" value="LOCAL-00021" />
+      <option name="project" value="LOCAL" />
+      <updated>1773913580854</updated>
+    </task>
+    <option name="localTasksCounter" value="22" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -224,9 +268,13 @@
     <MESSAGE value="```&#10;feat(skill): 新增AI技能管理模块并集成到系统- 新增skillController路由控制器，提供AI技能管理API接口&#10;- 在server.py中注册get_db依赖注入，支持数据库连接管理&#10;- 添加技能同步服务SkillSyncService，在应用启动时从数据库同步技能到文件系统&#10;- 集成技能路由到FastAPI应用，添加'AI技能管理'标签分类&#10;-临时注释Dockerfile中Playwright相关依赖安装，避免构建问题- 更新多个SKILL.md文档和相关参考资料，完善技能模块文档&#10;```" />
     <MESSAGE value="```&#10;feat(skills): 添加Playwright CLI技能和技能管理功能- 添加Playwright CLI README文档，介绍CLI与MCP的区别及使用方法- 实现技能CRUD接口，包括获取列表、新增、修改、删除等操作&#10;- 添加技能文件管理功能，支持上传ZIP文件导入技能&#10;- 实现技能数据库操作层，提供技能基础信息和元数据管理&#10;- 支持技能的导入导出和文件系统同步功能&#10;- 添加本地权限配置文件，允许特定Bash命令执行&#10;```" />
     <MESSAGE value="```&#10;build(docker): 优化Dockerfile构建流程和解决volume覆盖问题- 修改Dockerfile将代码先复制到/tmp/app_src目录，避免被volume覆盖&#10;- 在start.sh中添加rsync同步代码到/app目录的逻辑- 安装rsync工具用于代码同步- 更新Dockerfile中的依赖安装路径和参数配置&#10;- 简化Dockerfile注释并优化构建步骤顺序&#10;```" />
-    <option name="LAST_COMMIT_MESSAGE" value="```&#10;build(docker): 优化Dockerfile构建流程和解决volume覆盖问题- 修改Dockerfile将代码先复制到/tmp/app_src目录，避免被volume覆盖&#10;- 在start.sh中添加rsync同步代码到/app目录的逻辑- 安装rsync工具用于代码同步- 更新Dockerfile中的依赖安装路径和参数配置&#10;- 简化Dockerfile注释并优化构建步骤顺序&#10;```" />
+    <MESSAGE value="```&#10;build(docker): 优化Dockerfile构建流程和解决volume覆盖问题&#10;&#10;- 修改Dockerfile将代码先复制到/tmp/app_src目录，避免被volume覆盖&#10;- 在start.sh中添加rsync同步代码到/app目录的逻辑&#10;- 安装rsync工具用于代码同步&#10;- 更新Dockerfile中的依赖安装路径和参数配置&#10;- 简化Dockerfile注释并优化构建步骤顺序&#10;```" />
+    <MESSAGE value="```&#10;feat(backend): 在Dockerfile中优化rsync安装流程&#10;&#10;- 更新apt并安装rsync及其他系统依赖&#10;- 清理apt缓存以减少镜像大小&#10;- 移除重复的apt update和rsync安装命令&#10;```" />
+    <MESSAGE value="```&#10;feat(backend): 在 Dockerfile 中添加 Node.js 22.x 支持&#10;&#10;- 添加 NodeSource GPG key 导入以确保包的安全性&#10;- 配置 Node.js 22.x 的 APT仓库源&#10;- 安装 Node.js 而不是 rsync&#10;- 更新系统包管理器并清理缓存```" />
+    <MESSAGE value="```&#10;fix(backend): 移除旧的NodeSource源列表文件&#10;&#10;移除了过时的/etc/apt/sources.list.d/nodesource.list文件，&#10;以避免在Docker构建过程中出现APT源冲突问题```" />
+    <option name="LAST_COMMIT_MESSAGE" value="```&#10;fix(backend): 移除旧的NodeSource源列表文件&#10;&#10;移除了过时的/etc/apt/sources.list.d/nodesource.list文件，&#10;以避免在Docker构建过程中出现APT源冲突问题```" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/casego_backend_pg$app.coverage" NAME="app 覆盖结果" MODIFIED="1773880427969" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/casego_backend_pg$app.coverage" NAME="app 覆盖结果" MODIFIED="1773936721648" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
 </project>
