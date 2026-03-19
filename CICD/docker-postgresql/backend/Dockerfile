@@ -1,33 +1,28 @@
 FROM casego-backend:latest
 
-# 设置环境变量
 ENV TZ=Asia/Shanghai \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     APP_ENV=prod
 
-# 设置工作目录
 WORKDIR /app
-# RUN npm install -g @playwright/cli@latest
-# RUN npm install -g @playwright/mcp
-# 先复制依赖文件，有变化才重新安装
-COPY ./requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt \
+
+COPY ./requirements.txt /tmp/app_src/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/app_src/requirements.txt \
     -i https://mirrors.aliyun.com/pypi/simple/ \
     --extra-index-url https://pypi.org/simple \
     --trusted-host mirrors.aliyun.com \
     --timeout=120 \
-    --retries=5
+    --retries=5 \
 
-# 复制应用代码
-COPY ./ /app/
+RUN apt install rsync
 
-# 复制启动脚本
-COPY ./CICD/docker-postgresql/backend/start.sh /app/start.sh
-RUN chmod +x /app/start.sh
+# 代码先放到 /tmp/app_src，不放 /app（防止被 volume 覆盖）
+COPY ./ /tmp/app_src/
 
-# 暴露端口
+COPY ./CICD/docker-postgresql/backend/start.sh /start.sh
+RUN chmod +x /start.sh
+
 EXPOSE 9099
 
-# 启动应用
-CMD ["/app/start.sh"]
+CMD ["/start.sh"]

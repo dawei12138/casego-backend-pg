@@ -81,6 +81,19 @@ if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
 else
     echo "Redis 连接成功！"
 fi
+# ========================================
+# 同步代码到 /app（解决 volume 覆盖问题）
+# ========================================
+echo "同步代码文件..."
+
+# 确保 /app 目录存在
+mkdir -p /app
+
+# --update: 源文件比目标文件新才覆盖，用户数据文件不受影响
+# --checksum: 按内容比较而不是时间戳（更可靠）
+rsync -av --update --checksum /tmp/app_src/ /app/
+
+echo "代码同步完成！"
 
 # 运行数据库迁移（如果需要）
 # python -m alembic upgrade head
