@@ -5,11 +5,21 @@ ENV TZ=Asia/Shanghai \
     PYTHONUNBUFFERED=1 \
     APP_ENV=prod
 
-# 先更新 apt 并安装 rsync（以及可能的其他系统依赖）
+RUN apt-get update && apt-get install -y ca-certificates curl gnupg
+
+# 导入 NodeSource GPG key（新版安全方式）
+RUN mkdir -p /etc/apt/keyrings \
+ && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+    | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+
+# ⚠️ 这里改成 node_22.x
+RUN echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" \
+    > /etc/apt/sources.list.d/nodesource.list
+
+# 安装 Node.js
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends rsync && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y nodejs
+
 
 WORKDIR /app
 
