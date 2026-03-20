@@ -32,6 +32,7 @@ from module_llm.chat_agent.controller.stream_helpers import (
     process_stream_chunks,
     check_interrupts,
     make_sse_response,
+    rollback_checkpoint_state,
 )
 from module_llm.chat_mcp_config.dao.mcpconfig_dao import McpconfigDao
 from module_llm.chat_agent.mcp.loader import mcp_tools_context, build_connections_from_db_configs
@@ -108,6 +109,8 @@ async def chat_completions(
         MAX_RETRIES = 2  # 最多重试 2 次（共 3 次尝试）
         request_id = str(uuid4())
         attempt = 0
+        agent = None
+        pre_request_messages = None
 
         try:
             # MCP context 包裹整个流式生命周期，确保 session 持久有效
@@ -119,6 +122,15 @@ async def chat_completions(
                     current_user.user.user_id, request.thread_id,
                     mcp_tools=mcp_tools if mcp_tools else None,
                 )
+
+                # ── 保存请求前的 checkpoint 状态，用于失败时回滚 ──
+                pre_request_messages = []
+                try:
+                    pre_state = await agent.aget_state(config)
+                    if pre_state and pre_state.values:
+                        pre_request_messages = list(pre_state.values.get("messages", []))
+                except Exception as state_err:
+                    logger.warning(f'[SSE] 获取请求前状态失败: {state_err}')
 
                 # ── 带重试的流式执行 ──
                 while True:
@@ -141,6 +153,8 @@ async def chat_completions(
 
                     except RETRYABLE_EXCEPTIONS as retry_err:
                         attempt += 1
+                        # 回滚 checkpoint 到请求前状态，清除残缺的 AI 响应和重复的用户消息
+                        await rollback_checkpoint_state(agent, config, pre_request_messages, "[SSE]")
                         if attempt > MAX_RETRIES:
                             raise  # 重试耗尽，抛给外层处理
                         logger.warning(
@@ -172,6 +186,9 @@ async def chat_completions(
             yield "data: [DONE]\n\n"
         except Exception as e:
             logger.exception(f'对话异常: {e}')
+            # 非重试异常也回滚，防止残缺消息污染历史
+            if agent is not None and pre_request_messages is not None:
+                await rollback_checkpoint_state(agent, config, pre_request_messages, "[SSE]")
             yield _sse({"request_id": request_id, "type": "error", "error": str(e)})
             yield "data: [DONE]\n\n"
         finally:

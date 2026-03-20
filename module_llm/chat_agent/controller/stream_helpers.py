@@ -260,6 +260,22 @@ async def process_stream_chunks(
     logger.info(f'{log_prefix} 流结束，共 {chunk_count} 个 chunk')
 
 
+# ── Checkpoint 回滚 ──────────────────────────────────────────────
+
+async def rollback_checkpoint_state(agent, config: dict, pre_messages: list, log_prefix: str = "[SSE]"):
+    """
+    将 checkpoint 状态回滚到请求前的消息列表。
+
+    用于流式请求失败后清除被污染的对话历史（部分 AI 响应、重复用户消息等），
+    防止后续请求基于残缺历史持续报错。
+    """
+    try:
+        await agent.aupdate_state(config, {"messages": pre_messages})
+        logger.info(f'{log_prefix} checkpoint 已回滚到请求前状态 (消息数: {len(pre_messages)})')
+    except Exception as rollback_err:
+        logger.error(f'{log_prefix} checkpoint 回滚失败: {rollback_err}')
+
+
 # ── 中断检测 ──────────────────────────────────────────────────────
 
 async def check_interrupts(
