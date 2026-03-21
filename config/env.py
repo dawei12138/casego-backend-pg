@@ -55,8 +55,8 @@ class DataBaseSettings(BaseSettings):
     db_password: str = '123456'
     db_database: str = 'postgres'
     db_echo: bool = False
-    db_max_overflow: int = 10
-    db_pool_size: int = 0
+    db_max_overflow: int = 20
+    db_pool_size: int = 10
     db_pool_recycle: int = 3600
     db_pool_timeout: int = 30
 

@@ -27,8 +27,23 @@ SKILL_NAME_PATTERN = re.compile(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$')
 
 class SkillImportService:
     """
-    技能导入服务 - 处理 ZIP 上传和 URL 导入
+    技能导入服务 - 处理 ZIP 上传、MD 上传和 URL 导入
     """
+
+    @staticmethod
+    def slugify_skill_name(name: str) -> str:
+        """
+        将任意名称转换为合法的技能目录名（小写字母、数字、连字符）
+
+        :param name: 原始名称，如 "API Test Suite Generator"
+        :return: 转换后的名称，如 "api-test-suite-generator"
+        """
+        slug = name.lower().strip()
+        slug = re.sub(r'[_\s]+', '-', slug)
+        slug = re.sub(r'[^a-z0-9-]', '', slug)
+        slug = re.sub(r'-+', '-', slug)
+        slug = slug.strip('-')
+        return slug
 
     @staticmethod
     def validate_skill_name(skill_name: str) -> bool:
@@ -103,15 +118,21 @@ class SkillImportService:
             skill_md_content = zf.read(skill_md_path).decode('utf-8')
             metadata = cls.parse_skill_md_frontmatter(skill_md_content)
 
-            # 确定技能名称
-            skill_name = metadata.get('name', '')
+            # 确定技能名称（display_name 保存原始名称）
+            raw_name = metadata.get('name', '')
+            display_name = raw_name
+            skill_name = raw_name
             if not skill_name and skill_root:
                 skill_name = skill_root.rstrip('/')
+                display_name = display_name or skill_name
             if not skill_name:
                 raise ValueError('无法从ZIP中推断技能名称，请在SKILL.md frontmatter中指定name字段')
 
+            # 自动转换不合法的名称
             if not cls.validate_skill_name(skill_name):
-                raise ValueError(f'技能名称不合法: {skill_name}（只允许小写字母、数字和连字符）')
+                skill_name = cls.slugify_skill_name(skill_name)
+            if not skill_name or not cls.validate_skill_name(skill_name):
+                raise ValueError(f'技能名称转换后仍不合法: {raw_name}（只允许小写字母、数字和连字符）')
 
             # 检查是否已存在
             existing = await SkillDao.get_skill_by_name(db, skill_name)
@@ -122,7 +143,7 @@ class SkillImportService:
             now = datetime.now()
             skill_model = SkillModel(
                 skill_name=skill_name,
-                display_name=metadata.get('name', skill_name),
+                display_name=display_name or skill_name,
                 description=metadata.get('description', ''),
                 enabled=True,
                 source_type='upload',
@@ -238,6 +259,8 @@ class SkillImportService:
             skill_name = url_path.lower().replace('_', '-').replace(' ', '-')
 
         if not cls.validate_skill_name(skill_name):
+            skill_name = cls.slugify_skill_name(skill_name)
+        if not skill_name or not cls.validate_skill_name(skill_name):
             raise ValueError(f'技能名称不合法: {skill_name}，请手动指定skill_name')
 
         # 检查是否已存在
@@ -279,6 +302,82 @@ class SkillImportService:
         await db.commit()
 
         # 同步到文件系统
+        await SkillSyncService.sync_skill(db, skill_name)
+
+        return {
+            'skill_name': skill_name,
+            'skill_id': str(db_skill.skill_id),
+            'file_count': 1,
+        }
+
+    @classmethod
+    async def import_from_md(
+        cls,
+        db: AsyncSession,
+        md_content: str,
+        filename: str,
+        user_name: str,
+    ) -> dict:
+        """
+        从单个 MD 文件导入技能
+
+        :param db: orm对象
+        :param md_content: MD 文件文本内容
+        :param filename: 原始文件名
+        :param user_name: 当前用户名
+        :return: 导入结果 {skill_name, skill_id, file_count}
+        """
+        metadata = cls.parse_skill_md_frontmatter(md_content)
+
+        # 确定技能名称
+        raw_name = metadata.get('name', '')
+        display_name = raw_name
+        skill_name = raw_name
+        if not skill_name:
+            # 从文件名推断
+            base = filename.rsplit('.', 1)[0] if '.' in filename else filename
+            skill_name = base.lower().replace('_', '-').replace(' ', '-')
+            display_name = display_name or base
+
+        if not cls.validate_skill_name(skill_name):
+            skill_name = cls.slugify_skill_name(skill_name)
+        if not skill_name or not cls.validate_skill_name(skill_name):
+            raise ValueError(f'技能名称转换后仍不合法: {raw_name or filename}')
+
+        # 检查是否已存在
+        existing = await SkillDao.get_skill_by_name(db, skill_name)
+        if existing:
+            raise ValueError(f'技能 {skill_name} 已存在')
+
+        now = datetime.now()
+        skill_model = SkillModel(
+            skill_name=skill_name,
+            display_name=display_name or skill_name,
+            description=metadata.get('description', ''),
+            enabled=True,
+            source_type='upload',
+            allowed_tools=metadata.get('allowed-tools', ''),
+            license_info=metadata.get('license', ''),
+            create_by=user_name,
+            create_time=now,
+            update_by=user_name,
+            update_time=now,
+        )
+        db_skill = await SkillDao.add_skill_dao(db, skill_model)
+
+        file_model = SkillFileModel(
+            skill_id=db_skill.skill_id,
+            file_path='SKILL.md',
+            content=md_content,
+            is_binary=False,
+            create_by=user_name,
+            create_time=now,
+            update_by=user_name,
+            update_time=now,
+        )
+        await SkillFileDao.add_file_dao(db, file_model)
+
+        await db.commit()
         await SkillSyncService.sync_skill(db, skill_name)
 
         return {

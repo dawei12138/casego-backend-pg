@@ -364,16 +364,25 @@ description: {page_object.description or ''}
     # ==================== 导入 ====================
 
     @classmethod
-    async def upload_skill_services(cls, query_db: AsyncSession, zip_bytes: bytes, user_name: str):
+    async def upload_skill_services(cls, query_db: AsyncSession, file_bytes: bytes, filename: str, user_name: str):
         """
-        上传ZIP文件导入技能
+        上传文件导入技能（支持 ZIP 和 MD）
 
         :param query_db: orm对象
-        :param zip_bytes: ZIP文件字节
+        :param file_bytes: 文件字节
+        :param filename: 原始文件名
         :param user_name: 当前用户名
         :return: 导入结果
         """
-        result = await SkillImportService.import_from_zip(query_db, zip_bytes, user_name)
+        lower_name = (filename or '').lower()
+        if lower_name.endswith('.md'):
+            try:
+                md_content = file_bytes.decode('utf-8')
+            except UnicodeDecodeError:
+                raise ValueError('MD文件内容无法解码为UTF-8文本')
+            result = await SkillImportService.import_from_md(query_db, md_content, filename, user_name)
+        else:
+            result = await SkillImportService.import_from_zip(query_db, file_bytes, user_name)
         return CrudResponseModel(
             is_success=True,
             message=f'导入成功: {result["skill_name"]}，共 {result["file_count"]} 个文件'

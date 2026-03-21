@@ -4,7 +4,11 @@
       "Bash(pip show:*)",
       "Bash(python3:*)",
       "Bash(ls:*)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(find D:/code/project/casaego-pg-github/casego-backend-pg/venv/Lib/site-packages/langgraph -type f -name *.py)",
+      "Bash(grep -r \"pending_sends\\\\|Ignoring unknown node name\" D:/code/project/casaego-pg-github/casego-backend-pg --include=*.py)",
+      "Bash(grep -r \"Send\\\\|StateGraph\\\\|langgraph\" D:/code/project/casaego-pg-github/casego-backend-pg --include=*.py)",
+      "Bash(python:*)"
     ]
   }
 }

@@ -433,6 +433,7 @@ def _create_minimal_graph():
 
     builder = StateGraph(MessagesState)
     builder.add_node("noop", noop)
+    builder.add_node("tools", noop)  # 匹配实际 agent 图的节点名，避免 checkpoint 恢复时警告
     builder.add_edge(START, "noop")
     builder.add_edge("noop", END)
     return builder

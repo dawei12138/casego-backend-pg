@@ -126,7 +126,7 @@ async def query_detail_skill(request: Request, skill_id: str, query_db: AsyncSes
     '/upload',
     dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:add'))],
     summary='上传技能包',
-    description='上传ZIP文件导入技能',
+    description='上传ZIP或MD文件导入技能',
 )
 async def upload_skill(
     request: Request,
@@ -135,9 +135,9 @@ async def upload_skill(
     current_user: CurrentUserModel = Depends(LoginService.get_current_user),
 ):
     try:
-        zip_bytes = await file.read()
+        file_bytes = await file.read()
         result = await SkillService.upload_skill_services(
-            query_db, zip_bytes, current_user.user.user_name
+            query_db, file_bytes, file.filename, current_user.user.user_name
         )
         return ResponseUtil.success(msg=result.message)
     except ValueError as e:
