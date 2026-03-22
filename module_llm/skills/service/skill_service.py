@@ -56,14 +56,13 @@ class SkillService:
         :return: 技能简要列表
         """
         skill_list_result = await SkillDao.get_skill_list(query_db, query_object, is_page=False)
-        rows = skill_list_result.get('rows', []) if isinstance(skill_list_result, dict) else []
         skill_list = []
-        for item in rows:
+        for item in skill_list_result:
             skill_list.append({
-                'skillId': str(item.skill_id),
-                'skillName': item.skill_name,
-                'displayName': item.display_name,
-                'enabled': item.enabled,
+                'skillId': str(item.get('skillId', '')),
+                'skillName': item.get('skillName', ''),
+                'displayName': item.get('displayName', ''),
+                'enabled': item.get('enabled', False),
             })
         return skill_list
 

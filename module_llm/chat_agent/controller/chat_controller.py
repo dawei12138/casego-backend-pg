@@ -121,6 +121,7 @@ async def chat_completions(
                     request.enable_thinking, request.enable_web_search,
                     current_user.user.user_id, request.thread_id,
                     mcp_tools=mcp_tools if mcp_tools else None,
+                    skill_ids=request.skill_ids,
                 )
 
                 # ── 保存请求前的 checkpoint 状态，用于失败时回滚 ──
@@ -246,6 +247,7 @@ async def answer_question(
                     current_user.user.user_id, request.thread_id,
                     log_prefix="[Answer] ",
                     mcp_tools=mcp_tools if mcp_tools else None,
+                    skill_ids=request.skill_ids,
                 )
 
                 async for sse_line in process_stream_chunks(

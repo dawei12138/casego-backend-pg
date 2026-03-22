@@ -8,7 +8,9 @@
       "Bash(find D:/code/project/casaego-pg-github/casego-backend-pg/venv/Lib/site-packages/langgraph -type f -name *.py)",
       "Bash(grep -r \"pending_sends\\\\|Ignoring unknown node name\" D:/code/project/casaego-pg-github/casego-backend-pg --include=*.py)",
       "Bash(grep -r \"Send\\\\|StateGraph\\\\|langgraph\" D:/code/project/casaego-pg-github/casego-backend-pg --include=*.py)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(pip3 show:*)",
+      "Bash(find D:codeprojectcasaego-pg-githubcasego-backend-pg -type d -name *test*)"
     ]
   }
 }

@@ -6,13 +6,18 @@
   <component name="ChangeListManager">
     <list default="true" id="851b233a-776a-4093-a81e-488998e0c650" name="更改" comment="```&#10;feat(chat): 添加checkpoint状态回滚机制防止对话历史污染- 引入rollback_checkpoint_state函数用于将checkpoint状态回滚到请求前的消息列表&#10;- 在chat_controller.py中保存请求前的checkpoint状态用于失败时回滚&#10;- 在重试异常和非重试异常情况下都进行checkpoint回滚，清除残缺AI响应和重复用户消息&#10;- 防止后续请求基于被污染的历史持续报错- 更新.claude/settings.local.json允许xargs grep命令执行&#10;```">
       <change beforePath="$PROJECT_DIR$/.claude/settings.local.json" beforeDir="false" afterPath="$PROJECT_DIR$/.claude/settings.local.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.env.prod" beforeDir="false" afterPath="$PROJECT_DIR$/.env.prod" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/config/env.py" beforeDir="false" afterPath="$PROJECT_DIR$/config/env.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CaseGo/skills/best-minds/.gitignore" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/controller/chat_controller.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/controller/chat_controller.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/module_llm/skills/controller/skill_controller.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/skills/controller/skill_controller.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/module_llm/skills/service/skill_import_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/skills/service/skill_import_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/controller/stream_helpers.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/controller/stream_helpers.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/deepagent_factory.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/deepagent_factory.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/entity/vo/chat_vo.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/entity/vo/chat_vo.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/skills/entity/vo/skill_vo.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/skills/entity/vo/skill_vo.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/module_llm/skills/service/skill_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/skills/service/skill_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/skills/service/skill_sync_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/skills/service/skill_sync_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/server.py" beforeDir="false" afterPath="$PROJECT_DIR$/server.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -93,6 +98,7 @@
       <workItem from="1773647660539" duration="30321000" />
       <workItem from="1773880414744" duration="1865000" />
       <workItem from="1773911073803" duration="27169000" />
+      <workItem from="1774075527902" duration="15019000" />
     </task>
     <task id="LOCAL-00001" summary="初始化">
       <created>1773563647192</created>
@@ -299,6 +305,6 @@
     <option name="LAST_COMMIT_MESSAGE" value="```&#10;feat(chat): 添加checkpoint状态回滚机制防止对话历史污染- 引入rollback_checkpoint_state函数用于将checkpoint状态回滚到请求前的消息列表&#10;- 在chat_controller.py中保存请求前的checkpoint状态用于失败时回滚&#10;- 在重试异常和非重试异常情况下都进行checkpoint回滚，清除残缺AI响应和重复用户消息&#10;- 防止后续请求基于被污染的历史持续报错- 更新.claude/settings.local.json允许xargs grep命令执行&#10;```" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/casego_backend_pg$app.coverage" NAME="app 覆盖结果" MODIFIED="1774000508051" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/casego_backend_pg$app.coverage" NAME="app 覆盖结果" MODIFIED="1774102253760" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
 </project>

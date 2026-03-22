@@ -107,10 +107,11 @@ async def lifespan(app: FastAPI):
     await SchedulerUtil.init_system_scheduler()
     await DatabaseTestUtil.run_full_connection_test(app)
 
-    # 从数据库同步技能到文件系统
+    # 从文件系统扫描并导入技能，然后同步到文件系统
     from module_llm.skills.service.skill_sync_service import SkillSyncService
     async for db in get_db():
         try:
+            await SkillSyncService.scan_and_import(db)
             await SkillSyncService.sync_all(db)
         except Exception as e:
             logger.warning(f'技能同步失败（不影响启动）: {e}')

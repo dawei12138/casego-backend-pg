@@ -10,6 +10,7 @@ DeepAgent 工厂 - 创建配置完整的 deep agent
 import os
 import re
 import subprocess
+from pathlib import PurePosixPath
 from urllib.parse import quote_plus
 
 from deepagents import create_deep_agent
@@ -241,6 +242,34 @@ class _WindowsCompatShellBackend(LocalShellBackend):
             )
 
 
+class _FilteredFilesystemBackend(FilesystemBackend):
+    """FilesystemBackend that filters root-level directory listings.
+
+    SkillsMiddleware.before_agent → _list_skills → backend.ls_info("/") 扫描技能根目录
+    发现子目录，再逐个读取 SKILL.md。此子类在根目录级别过滤 ls_info 结果，
+    只暴露指定的技能目录，实现按需加载。
+
+    非根目录的 ls_info（如列出技能目录内部文件）不受影响。
+    als_info 继承自 BackendProtocol，默认通过 asyncio.to_thread 调用 ls_info，
+    因此只需重写 ls_info 即可同时覆盖同步和异步路径。
+    """
+
+    def __init__(self, root_dir, allowed_names: set[str] | None = None, **kwargs):
+        super().__init__(root_dir=root_dir, **kwargs)
+        self._allowed_names = allowed_names
+
+    def ls_info(self, path: str):
+        items = super().ls_info(path)
+        # 仅在根级别过滤（SkillsMiddleware 发现技能的入口）
+        if self._allowed_names is not None and not path.strip("/"):
+            return [
+                item for item in items
+                if not item.get("is_dir")
+                or PurePosixPath(item["path"].rstrip("/")).name in self._allowed_names
+            ]
+        return items
+
+
 # 全局工作区根目录（与原 UserThreadFilesystemBackend 保持一致）
 WORKSPACE_ROOT = os.path.join("CaseGo", "agent_workspace")
 
@@ -294,6 +323,7 @@ async def create_deep_agent_instance(
         thread_id: str = None,
         tools: list = None,
         skills_paths: list[str] = None,
+        allowed_skill_names: set[str] | None = None,
         enable_subagent_mcp: bool = False,
 ):
     """
@@ -305,6 +335,9 @@ async def create_deep_agent_instance(
     :param thread_id: 当前会话 Thread ID
     :param tools: 工具列表（包含内置工具、MCP 工具等）
     :param skills_paths: Skills 目录路径列表
+    :param allowed_skill_names: 按需加载时指定的技能名称集合。
+                                传入时 skills backend 的根目录 ls_info 只返回指定的技能目录；
+                                为 None 则不做过滤，加载全部技能。
     :param enable_subagent_mcp: 是否为子 Agent 启用 MCP 工具（默认 False，避免浏览器状态问题）
     :return: 编译后的 deep agent
     """
@@ -335,10 +368,19 @@ async def create_deep_agent_instance(
         )
 
         # 共享技能目录：所有用户可读，通过 /skills/ 虚拟路径访问
-        skills_backend = FilesystemBackend(
-            root_dir=SKILLS_ROOT,
-            virtual_mode=True,
-        )
+        # 按需加载时使用 _FilteredFilesystemBackend 过滤根级别 ls_info，
+        # 使 SkillsMiddleware 只发现指定的技能目录
+        if allowed_skill_names is not None:
+            skills_backend = _FilteredFilesystemBackend(
+                root_dir=SKILLS_ROOT,
+                virtual_mode=True,
+                allowed_names=allowed_skill_names,
+            )
+        else:
+            skills_backend = FilesystemBackend(
+                root_dir=SKILLS_ROOT,
+                virtual_mode=True,
+            )
 
         return CompositeBackend(
             default=shell_backend,

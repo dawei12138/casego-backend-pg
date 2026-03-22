@@ -40,6 +40,8 @@ class SkillModel(BaseModel):
 
 
 class SkillQueryModel(SkillModel):
+    model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
+
     """
     技能不分页查询模型
     """
@@ -48,6 +50,8 @@ class SkillQueryModel(SkillModel):
 
 @as_query
 class SkillPageQueryModel(SkillQueryModel):
+    model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
+
     """
     技能分页查询模型
     """
@@ -59,12 +63,13 @@ class DeleteSkillModel(BaseModel):
     """
     删除技能模型
     """
-    model_config = ConfigDict(alias_generator=to_camel)
+    model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
 
     skill_ids: str = Field(description='需要删除的技能ID，多个逗号分隔')
 
 
 class SkillFileModel(BaseModel):
+
     """
     技能文件对应pydantic模型
     """
@@ -93,7 +98,7 @@ class SkillImportUrlModel(BaseModel):
     """
     URL导入模型
     """
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
 
     url: str = Field(description='导入URL地址')
     skill_name: Optional[str] = Field(default=None, description='技能目录名（可选，自动从URL推断）')

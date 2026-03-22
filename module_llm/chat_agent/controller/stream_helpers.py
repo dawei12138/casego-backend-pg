@@ -25,6 +25,7 @@ from module_llm.chat_agent.deepagent_factory import create_deep_agent_instance
 from module_llm.chat_agent.model_factory import create_chat_model
 from module_llm.chat_agent.tools import get_builtin_tools
 from module_llm.llm_provider.service.provider_config_service import Provider_configService
+from module_llm.skills.dao.skill_dao import SkillDao
 from module_llm.workspace.service.workspace_service import WorkspaceService
 from utils.log_util import logger
 
@@ -84,12 +85,15 @@ async def create_agent_and_model(
     thread_id: str,
     log_prefix: str = "",
     mcp_tools: list = None,
+    skill_ids: list[str] = None,
 ):
     """
     公共设置：查找提供商配置 → 创建模型 → 构建 agent。
 
     :param mcp_tools: 外部传入的 MCP 工具列表（由 mcp_tools_context 提供）。
                       若不为 None，则合并到内置工具中。
+    :param skill_ids: 前端传入的技能 UUID 列表。
+                      传入时只加载指定技能；为 None/空 则加载全部技能。
     :return: (model, agent)
     :raises ServiceException: 提供商配置不存在
     """
@@ -117,13 +121,28 @@ async def create_agent_and_model(
         tools.extend(mcp_tools)
         logger.info(f'{log_prefix}注入 {len(mcp_tools)} 个 MCP 工具')
 
-    skills_paths = ["/skills/"]
+    # 解析技能路径
+    # SkillsMiddleware._list_skills 期望 source 是技能的父目录（如 /skills/），
+    # 它会扫描子目录并在其中查找 SKILL.md。
+    # 按需加载时通过 allowed_skill_names 过滤 skills backend 的根级别 ls_info，
+    # 使中间件只发现指定的技能目录。
+    # 前端不传 skill_ids 时不加载任何技能。
+    skills_paths = None
+    allowed_skill_names = None
+    if skill_ids:
+        skills = await SkillDao.get_skill_by_ids(query_db, skill_ids)
+        allowed_skill_names = {s.skill_name for s in skills if s.enabled}
+        if allowed_skill_names:
+            skills_paths = ["/skills/"]
+            logger.info(f'{log_prefix}按需加载 {len(allowed_skill_names)} 个技能: {list(allowed_skill_names)}')
+
     agent = await create_deep_agent_instance(
         model=model,
         user_id=user_id,
         thread_id=thread_id,
         tools=tools,
         skills_paths=skills_paths,
+        allowed_skill_names=allowed_skill_names,
     )
 
     return model, agent

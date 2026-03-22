@@ -47,6 +47,7 @@ class ChatRequest(BaseModel):
     enable_thinking: bool = Field(default=False, description='是否开启思考模式(扩展推理)')
     enable_web_search: bool = Field(default=False, description='是否开启联网搜索')
     mcp_config_ids: Optional[List[str]] = Field(default=None, description='MCP服务器配置ID列表，传入则动态加载对应MCP工具')
+    skill_ids: Optional[List[str]] = Field(default=None, description='技能ID(UUID)列表，传入则只加载指定技能；为空则加载全部启用技能')
 
 
 class ChatHistoryQuery(BaseModel):
@@ -69,6 +70,7 @@ class AnswerRequest(BaseModel):
     enable_thinking: bool = Field(default=False, description='是否开启思考模式')
     enable_web_search: bool = Field(default=False, description='是否开启联网搜索')
     mcp_config_ids: Optional[List[str]] = Field(default=None, description='MCP服务器配置ID列表，传入则动态加载对应MCP工具')
+    skill_ids: Optional[List[str]] = Field(default=None, description='技能ID(UUID)列表，传入则只加载指定技能；为空则加载全部启用技能')
 
 
 class ToolCallModel(BaseModel):
