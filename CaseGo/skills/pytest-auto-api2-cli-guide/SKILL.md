@@ -1,4 +1,4 @@
-﻿---
+---
 name: pytest-auto-api2-cli-guide
 description: pytest-auto-api2-cli 中文使用技能。用于指导 YAML 用例编写、校验、生成、执行，以及 conftest 登录鉴权（Cookie/Token）实践。
 ---

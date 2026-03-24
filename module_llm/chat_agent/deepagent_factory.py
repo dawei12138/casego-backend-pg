@@ -77,8 +77,9 @@ class _WindowsCompatShellBackend(LocalShellBackend):
             # 文件或目录本身存在
             if resolved.exists():
                 return str(resolved)
-            # 父目录存在（支持即将创建的文件，如 echo "x" > /subdir/new.py）
-            if resolved.parent != self.cwd and resolved.parent.exists():
+            # 父目录存在（支持即将创建的文件/目录，如 mkdir /demo, echo "x" > /subdir/new.py）
+            # 注意：这里允许 parent == self.cwd，否则会漏掉 /demo 这类工作区根下新建路径。
+            if resolved.parent.exists():
                 return str(resolved)
         except (ValueError, OSError):
             pass

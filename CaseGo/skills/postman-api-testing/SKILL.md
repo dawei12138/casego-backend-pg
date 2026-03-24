@@ -1,5 +1,5 @@
 ---
-name: Postman API Testing
+name: postman-api-testing
 description: Postman collections, environments, pre-request scripts, and Newman CI
 version: 1.0.0
 author: thetestingacademy
@@ -52,25 +52,25 @@ postman/
 
 ```
 API Collection
-  ├── Auth
-  │     ├── Login
-  │     ├── Register
-  │     ├── Refresh Token
-  │     └── Logout
-  ├── Users
-  │     ├── Create User
-  │     ├── Get User by ID
-  │     ├── Update User
-  │     ├── Delete User
-  │     └── List Users
-  ├── Products
-  │     ├── Create Product
-  │     ├── Get Product
-  │     ├── Search Products
-  │     └── Delete Product
-  └── Workflows
-        ├── User Registration Flow
-        └── Complete Purchase Flow
+  鈹溾攢鈹€ Auth
+  鈹?    鈹溾攢鈹€ Login
+  鈹?    鈹溾攢鈹€ Register
+  鈹?    鈹溾攢鈹€ Refresh Token
+  鈹?    鈹斺攢鈹€ Logout
+  鈹溾攢鈹€ Users
+  鈹?    鈹溾攢鈹€ Create User
+  鈹?    鈹溾攢鈹€ Get User by ID
+  鈹?    鈹溾攢鈹€ Update User
+  鈹?    鈹溾攢鈹€ Delete User
+  鈹?    鈹斺攢鈹€ List Users
+  鈹溾攢鈹€ Products
+  鈹?    鈹溾攢鈹€ Create Product
+  鈹?    鈹溾攢鈹€ Get Product
+  鈹?    鈹溾攢鈹€ Search Products
+  鈹?    鈹斺攢鈹€ Delete Product
+  鈹斺攢鈹€ Workflows
+        鈹溾攢鈹€ User Registration Flow
+        鈹斺攢鈹€ Complete Purchase Flow
 ```
 
 ## Environment Variables
@@ -444,3 +444,4 @@ jobs:
 8. **Binary files in source control** -- Export as JSON, not Postman backup format.
 9. **Stale environments** -- Keep environment files synchronized with actual API configuration.
 10. **Not using data files** -- Repeating the same test with different data is what data files are for.
+

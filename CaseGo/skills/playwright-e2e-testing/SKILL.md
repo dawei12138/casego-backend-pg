@@ -1,5 +1,5 @@
 ---
-name: Playwright E2E Testing
+name: playwright-e2e-testing
 description: Comprehensive Playwright end-to-end testing patterns with Page Object Model, fixtures, and best practices
 version: 1.0.0
 author: thetestingacademy
@@ -501,3 +501,4 @@ await page.getByRole('option', { name: 'United States' }).click();
 - View trace: `npx playwright show-trace test-results/trace.zip`
 - Use `test.only` to isolate a single test during development.
 - Use `await page.pause()` to pause execution and inspect the page.
+
