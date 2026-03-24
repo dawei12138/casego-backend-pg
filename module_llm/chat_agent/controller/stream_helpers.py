@@ -182,6 +182,7 @@ async def process_stream_chunks(
     chunk_count = 0
     thinking_notified = False
     pending_tool_calls: dict = {}  # index -> {name, args, id}
+    last_node: str | None = None  # 追踪节点切换，用于在 model→tools 转换时提前发送工具参数
 
     async for msg_chunk, metadata in agent.astream(
         input_data, config=config, stream_mode="messages",
@@ -196,6 +197,25 @@ async def process_stream_chunks(
         node = metadata.get("langgraph_node")
         has_tool_calls = bool(getattr(msg_chunk, "tool_call_chunks", None))
         additional_kwargs = getattr(msg_chunk, "additional_kwargs", {})
+
+        # ── 节点切换检测：model→tools 时提前发送完整工具入参 ──
+        # 解决长时间运行的工具（如 execute）期间，前端看不到参数的问题
+        if node == "tools" and last_node != "tools" and pending_tool_calls:
+            for idx, tc_info in list(pending_tool_calls.items()):
+                raw_args = tc_info.get("args", "")
+                if raw_args:
+                    try:
+                        parsed_args = json.loads(raw_args) if raw_args else {}
+                    except (json.JSONDecodeError, TypeError):
+                        parsed_args = {"raw": raw_args}
+                    yield _sse({
+                        "request_id": request_id,
+                        "type": "tool_call_args",
+                        "tool": tc_info.get("name", ""),
+                        "call_id": tc_info.get("id", ""),
+                        "args": parsed_args,
+                    })
+        last_node = node
 
         # ── 调试日志 ──
         if debug_chunks and chunk_count <= debug_chunks:

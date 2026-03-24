@@ -5,49 +5,322 @@
 import asyncio
 import json
 import math
+from collections import deque
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 from uuid import uuid4
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config.database import AsyncSessionLocal
 from config.get_db import get_db
 from exceptions.exception import ServiceException
 from module_admin.system.entity.vo.user_vo import CurrentUserModel
 from module_admin.system.service.login_service import LoginService
-from module_llm.chat_agent.entity.vo.chat_vo import (
-    ChatRequest,
-    AnswerRequest,
-    AttachmentMeta,
-    ChatHistoryResponse,
-    ConversationTurnModel,
-    TurnEventModel,
-)
-from module_llm.chat_agent.service.attachment_service import AttachmentService
-from module_llm.chat_agent.deepagent_factory import get_checkpointer
 from module_llm.chat_agent.controller.stream_helpers import (
     RETRYABLE_EXCEPTIONS,
     _sse,
-    create_agent_and_model,
-    process_stream_chunks,
     check_interrupts,
+    create_agent_and_model,
     make_sse_response,
+    process_stream_chunks,
     rollback_checkpoint_state,
 )
+from module_llm.chat_agent.deepagent_factory import get_checkpointer
+from module_llm.chat_agent.entity.vo.chat_vo import (
+    AnswerRequest,
+    AttachmentMeta,
+    ChatHistoryResponse,
+    ChatRequest,
+    ConversationTurnModel,
+    TurnEventModel,
+)
+from module_llm.chat_agent.mcp.loader import (
+    build_connections_from_db_configs,
+    mcp_tools_context,
+)
+from module_llm.chat_agent.service.attachment_service import AttachmentService
 from module_llm.chat_mcp_config.dao.mcpconfig_dao import McpconfigDao
-from module_llm.chat_agent.mcp.loader import mcp_tools_context, build_connections_from_db_configs
 from module_llm.chat_thread.dao.thread_dao import ThreadDao
 from module_llm.chat_thread.entity.vo.thread_vo import ThreadModel
 from utils.log_util import logger
 from utils.response_util import ResponseUtil
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
-from langgraph.graph import StateGraph, MessagesState, START, END
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.types import Command
 
 chatController = APIRouter(prefix='/chat/agent')
 
-# 活跃流的取消事件：thread_id -> asyncio.Event（set 表示请求终止）
+# thread_id -> cancel_event. stop endpoint sets the event.
 _cancel_events: dict[str, asyncio.Event] = {}
+# thread_id -> active background run (single active run per thread)
+_stream_runs: dict[str, "_StreamRun"] = {}
+_stream_runs_lock = asyncio.Lock()
+
+_STREAM_END = object()
+_STREAM_QUEUE_MAXSIZE = 256
+_STREAM_BACKLOG_MAXSIZE = 2000
+_SSE_HEARTBEAT_SECONDS = 15
+
+
+@dataclass(slots=True)
+class _StreamRun:
+    thread_id: str
+    request_id: str
+    mode: str  # "completions" | "answer"
+    request_signature: str
+    cancel_event: asyncio.Event = field(default_factory=asyncio.Event)
+    subscribers: set[asyncio.Queue] = field(default_factory=set)
+    backlog: deque[str] = field(default_factory=lambda: deque(maxlen=_STREAM_BACKLOG_MAXSIZE))
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    finished: bool = False
+    task: asyncio.Task | None = None
+
+
+def _queue_put_latest(queue: asyncio.Queue, item: Any):
+    """Drop oldest item when queue is full so latest events still get delivered."""
+    try:
+        queue.put_nowait(item)
+    except asyncio.QueueFull:
+        try:
+            queue.get_nowait()
+        except asyncio.QueueEmpty:
+            pass
+        try:
+            queue.put_nowait(item)
+        except asyncio.QueueFull:
+            pass
+
+
+async def _publish_run_event(run: _StreamRun, sse_line: str):
+    async with run.lock:
+        run.backlog.append(sse_line)
+        subscribers = list(run.subscribers)
+
+    for queue in subscribers:
+        _queue_put_latest(queue, sse_line)
+
+
+async def _finish_run(run: _StreamRun):
+    async with run.lock:
+        if run.finished:
+            return
+        run.finished = True
+        subscribers = list(run.subscribers)
+
+    for queue in subscribers:
+        _queue_put_latest(queue, _STREAM_END)
+
+    async with _stream_runs_lock:
+        current = _stream_runs.get(run.thread_id)
+        if current is run:
+            _stream_runs.pop(run.thread_id, None)
+            _cancel_events.pop(run.thread_id, None)
+
+
+async def _subscribe_run(run: _StreamRun) -> asyncio.Queue:
+    queue: asyncio.Queue = asyncio.Queue(maxsize=_STREAM_QUEUE_MAXSIZE)
+    async with run.lock:
+        run.subscribers.add(queue)
+        cached_lines = list(run.backlog)
+        finished = run.finished
+
+    for line in cached_lines:
+        _queue_put_latest(queue, line)
+    if finished:
+        _queue_put_latest(queue, _STREAM_END)
+    return queue
+
+
+async def _unsubscribe_run(run: _StreamRun, queue: asyncio.Queue):
+    async with run.lock:
+        run.subscribers.discard(queue)
+
+
+async def _stream_events_from_run(run: _StreamRun):
+    queue = await _subscribe_run(run)
+    try:
+        while True:
+            try:
+                item = await asyncio.wait_for(queue.get(), timeout=_SSE_HEARTBEAT_SECONDS)
+            except asyncio.TimeoutError:
+                # SSE comment heartbeat, helps keep proxies from closing idle streams.
+                yield ": ping\n\n"
+                continue
+
+            if item is _STREAM_END:
+                break
+            yield item
+    except asyncio.CancelledError:
+        logger.info(f'[SSE] client disconnected, run continues in background: thread_id={run.thread_id}, mode={run.mode}')
+        raise
+    finally:
+        await _unsubscribe_run(run, queue)
+
+
+def _build_request_signature(payload: dict) -> str:
+    """Stable signature used to detect reconnect of the same request."""
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _assert_reconnectable(run: _StreamRun, mode: str, request_signature: str):
+    if run.mode != mode:
+        raise ServiceException(message=f'会话当前正在执行 {run.mode} 任务，请稍后重试或先手动终止')
+    if run.request_signature != request_signature:
+        raise ServiceException(message='会话已有进行中的任务，请等待完成后再发起新的请求')
+
+
+async def _get_active_run(thread_id: str) -> _StreamRun | None:
+    async with _stream_runs_lock:
+        run = _stream_runs.get(thread_id)
+        if run is not None and run.finished:
+            _stream_runs.pop(thread_id, None)
+            _cancel_events.pop(thread_id, None)
+            return None
+        return run
+
+
+async def _run_chat_completion(
+    run: _StreamRun,
+    request: ChatRequest,
+    input_data: dict,
+    mcp_connections: dict,
+    current_user: CurrentUserModel,
+):
+    max_retries = 2
+    attempt = 0
+    agent = None
+    pre_request_messages = None
+    config = {"configurable": {"thread_id": request.thread_id}}
+
+    try:
+        async with AsyncSessionLocal() as run_db:
+            async with mcp_tools_context(servers=mcp_connections) as mcp_tools:
+                _, agent = await create_agent_and_model(
+                    run_db,
+                    request.provider_key,
+                    request.model,
+                    request.enable_thinking,
+                    request.enable_web_search,
+                    current_user.user.user_id,
+                    request.thread_id,
+                    mcp_tools=mcp_tools if mcp_tools else None,
+                    skill_ids=request.skill_ids,
+                )
+
+                pre_request_messages = []
+                try:
+                    pre_state = await agent.aget_state(config)
+                    if pre_state and pre_state.values:
+                        pre_request_messages = list(pre_state.values.get('messages', []))
+                except Exception as state_err:
+                    logger.warning(f'[SSE] 获取请求前状态失败: {state_err}')
+
+                while True:
+                    try:
+                        async for sse_line in process_stream_chunks(
+                            agent,
+                            input_data,
+                            config,
+                            request_id=run.request_id,
+                            cancel_event=run.cancel_event,
+                            enable_thinking=request.enable_thinking,
+                            user_id=current_user.user.user_id,
+                            thread_id=request.thread_id,
+                            log_prefix='[SSE]',
+                            debug_chunks=10,
+                        ):
+                            await _publish_run_event(run, sse_line)
+                        break
+                    except RETRYABLE_EXCEPTIONS as retry_err:
+                        attempt += 1
+                        await rollback_checkpoint_state(agent, config, pre_request_messages, '[SSE]')
+                        if attempt > max_retries:
+                            raise
+                        logger.warning(
+                            f'[SSE] 第 {attempt}/{max_retries} 次重试 '
+                            f'({type(retry_err).__name__}): thread_id={request.thread_id}'
+                        )
+                        await _publish_run_event(run, _sse({
+                            'request_id': run.request_id,
+                            'type': 'retry',
+                            'attempt': attempt,
+                            'max_retries': max_retries,
+                            'reason': type(retry_err).__name__,
+                        }))
+                        await asyncio.sleep(min(2 ** attempt, 8))
+
+                async for sse_line in check_interrupts(agent, config, run.request_id, '[SSE]'):
+                    await _publish_run_event(run, sse_line)
+
+        await _publish_run_event(run, 'data: [DONE]\n\n')
+    except RETRYABLE_EXCEPTIONS:
+        logger.error(f'对话超时（已重试 {max_retries} 次）: thread_id={request.thread_id}')
+        await _publish_run_event(run, _sse({
+            'request_id': run.request_id,
+            'type': 'error',
+            'error': f'模型响应超时，请稍后重试（已自动重试 {max_retries} 次）',
+        }))
+        await _publish_run_event(run, 'data: [DONE]\n\n')
+    except Exception as e:
+        logger.exception(f'对话异常: {e}')
+        if agent is not None and pre_request_messages is not None:
+            await rollback_checkpoint_state(agent, config, pre_request_messages, '[SSE]')
+        await _publish_run_event(run, _sse({'request_id': run.request_id, 'type': 'error', 'error': str(e)}))
+        await _publish_run_event(run, 'data: [DONE]\n\n')
+    finally:
+        await _finish_run(run)
+
+
+async def _run_answer_completion(
+    run: _StreamRun,
+    request: AnswerRequest,
+    mcp_connections: dict,
+    current_user: CurrentUserModel,
+):
+    config = {"configurable": {"thread_id": request.thread_id}}
+    try:
+        async with AsyncSessionLocal() as run_db:
+            async with mcp_tools_context(servers=mcp_connections) as mcp_tools:
+                _, agent = await create_agent_and_model(
+                    run_db,
+                    request.provider_key,
+                    request.model,
+                    request.enable_thinking,
+                    request.enable_web_search,
+                    current_user.user.user_id,
+                    request.thread_id,
+                    log_prefix='[Answer] ',
+                    mcp_tools=mcp_tools if mcp_tools else None,
+                    skill_ids=request.skill_ids,
+                )
+
+                async for sse_line in process_stream_chunks(
+                    agent,
+                    Command(resume=request.answers),
+                    config,
+                    request_id=run.request_id,
+                    cancel_event=run.cancel_event,
+                    enable_thinking=request.enable_thinking,
+                    user_id=current_user.user.user_id,
+                    thread_id=request.thread_id,
+                    log_prefix='[Answer SSE]',
+                ):
+                    await _publish_run_event(run, sse_line)
+
+                async for sse_line in check_interrupts(agent, config, run.request_id, '[Answer SSE]'):
+                    await _publish_run_event(run, sse_line)
+
+        await _publish_run_event(run, 'data: [DONE]\n\n')
+    except Exception as e:
+        logger.exception(f'[Answer] 对话恢复异常: {e}')
+        await _publish_run_event(run, _sse({'request_id': run.request_id, 'type': 'error', 'error': str(e)}))
+        await _publish_run_event(run, 'data: [DONE]\n\n')
+    finally:
+        await _finish_run(run)
 
 
 @chatController.post('/completions', summary='流式对话', description='SSE流式对话接口，使用 deepagents 架构')
@@ -57,12 +330,25 @@ async def chat_completions(
         current_user: CurrentUserModel = Depends(LoginService.get_current_user),
 ):
     """
-    流式对话接口（基于 deepagents）
+    流式对话接口（基于 deepagents）。
 
-    流程: 获取提供商配置 → 创建模型 → 构建 deep agent → 流式输出
-    支持通过 mcp_config_ids 动态加载 MCP 工具
+    关键行为：
+    - 任务在后台协程中执行，不再绑定单个前端 SSE 连接生命周期
+    - 前端断流/刷新后可重连，不会自动中断任务
+    - 只有调用 /stop 才会触发真正取消
     """
-    # 1. 检查thread是否已存在，不存在则新增
+    request_signature = _build_request_signature(
+        request.model_dump(mode='json', by_alias=True, exclude_none=False)
+    )
+
+    # Reconnect to the same in-flight request if it already exists.
+    active_run = await _get_active_run(request.thread_id)
+    if active_run is not None:
+        _assert_reconnectable(active_run, 'completions', request_signature)
+        logger.info(f'[SSE] 检测到会话重连: thread_id={request.thread_id}, mode=completions')
+        return make_sse_response(_stream_events_from_run(active_run))
+
+    # Ensure thread exists.
     existing_thread = await ThreadDao.get_thread_detail_by_id(query_db, thread_id=request.thread_id)
     if not existing_thread:
         new_thread = ThreadModel(
@@ -77,21 +363,14 @@ async def chat_completions(
         await query_db.commit()
         logger.info(f'新增聊天线程: thread_id={request.thread_id}')
 
-    # 2. 提前从数据库获取MCP配置（在generator外部执行DB查询）
-    # 使用空字典而非 None，避免 mcp_tools_context 回退到静态配置加载不需要的 MCP 工具
+    # Load MCP configs with request-scoped DB session.
     mcp_connections = {}
     if request.mcp_config_ids:
         db_configs = await McpconfigDao.get_mcpconfig_by_ids(query_db, request.mcp_config_ids)
         mcp_connections = build_connections_from_db_configs(db_configs)
         logger.info(f'加载 {len(mcp_connections)} 个MCP服务器配置: {list(mcp_connections.keys())}')
 
-    config = {"configurable": {"thread_id": request.thread_id}}
-
-    # 注册取消事件（必须在生成器外部，确保 /stop 接口能立即找到）
-    cancel_event = asyncio.Event()
-    _cancel_events[request.thread_id] = cancel_event
-
-    # 3. 构造消息输入（支持附件多模态）
+    # Build message input.
     if request.attachments:
         content_blocks, att_meta = await AttachmentService.build_message_content(
             message=request.message,
@@ -99,103 +378,42 @@ async def chat_completions(
             user_id=current_user.user.user_id,
             thread_id=request.thread_id,
         )
-        input_data = {"messages": [
-            HumanMessage(content=content_blocks, additional_kwargs={"attachments": att_meta})
-        ]}
+        input_data = {
+            'messages': [
+                HumanMessage(content=content_blocks, additional_kwargs={'attachments': att_meta})
+            ]
+        }
     else:
-        input_data = {"messages": [{"role": "user", "content": request.message}]}
+        input_data = {'messages': [{'role': 'user', 'content': request.message}]}
 
-    async def event_stream():
-        MAX_RETRIES = 2  # 最多重试 2 次（共 3 次尝试）
-        request_id = str(uuid4())
-        attempt = 0
-        agent = None
-        pre_request_messages = None
+    # Register the background run (double-check for concurrent requests).
+    async with _stream_runs_lock:
+        current_run = _stream_runs.get(request.thread_id)
+        if current_run is not None and not current_run.finished:
+            run = current_run
+            created = False
+        else:
+            run = _StreamRun(
+                thread_id=request.thread_id,
+                request_id=str(uuid4()),
+                mode='completions',
+                request_signature=request_signature,
+            )
+            _stream_runs[request.thread_id] = run
+            _cancel_events[request.thread_id] = run.cancel_event
+            created = True
 
-        try:
-            # MCP context 包裹整个流式生命周期，确保 session 持久有效
-            async with mcp_tools_context(servers=mcp_connections) as mcp_tools:
-                # Agent 在 MCP context 内创建，工具引用活跃的 session
-                _, agent = await create_agent_and_model(
-                    query_db, request.provider_key, request.model,
-                    request.enable_thinking, request.enable_web_search,
-                    current_user.user.user_id, request.thread_id,
-                    mcp_tools=mcp_tools if mcp_tools else None,
-                    skill_ids=request.skill_ids,
-                )
+    if not created:
+        _assert_reconnectable(run, 'completions', request_signature)
+        logger.info(f'[SSE] 并发场景复用已存在运行: thread_id={request.thread_id}, mode=completions')
+        return make_sse_response(_stream_events_from_run(run))
 
-                # ── 保存请求前的 checkpoint 状态，用于失败时回滚 ──
-                pre_request_messages = []
-                try:
-                    pre_state = await agent.aget_state(config)
-                    if pre_state and pre_state.values:
-                        pre_request_messages = list(pre_state.values.get("messages", []))
-                except Exception as state_err:
-                    logger.warning(f'[SSE] 获取请求前状态失败: {state_err}')
-
-                # ── 带重试的流式执行 ──
-                while True:
-                    try:
-                        async for sse_line in process_stream_chunks(
-                            agent,
-                            input_data,
-                            config,
-                            request_id=request_id,
-                            cancel_event=cancel_event,
-                            enable_thinking=request.enable_thinking,
-                            user_id=current_user.user.user_id,
-                            thread_id=request.thread_id,
-                            log_prefix="[SSE]",
-                            debug_chunks=10,
-                        ):
-                            yield sse_line
-                        # astream 正常结束，跳出重试循环
-                        break
-
-                    except RETRYABLE_EXCEPTIONS as retry_err:
-                        attempt += 1
-                        # 回滚 checkpoint 到请求前状态，清除残缺的 AI 响应和重复的用户消息
-                        await rollback_checkpoint_state(agent, config, pre_request_messages, "[SSE]")
-                        if attempt > MAX_RETRIES:
-                            raise  # 重试耗尽，抛给外层处理
-                        logger.warning(
-                            f'[SSE] 第 {attempt}/{MAX_RETRIES} 次重试 '
-                            f'({type(retry_err).__name__}): thread_id={request.thread_id}'
-                        )
-                        yield _sse({
-                            "request_id": request_id,
-                            "type": "retry",
-                            "attempt": attempt,
-                            "max_retries": MAX_RETRIES,
-                            "reason": type(retry_err).__name__,
-                        })
-                        await asyncio.sleep(min(2 ** attempt, 8))  # 指数退避: 2s, 4s
-
-                # ── 检查是否被 interrupt() 中断（仍在 MCP context 内）──
-                async for sse_line in check_interrupts(agent, config, request_id, "[SSE]"):
-                    yield sse_line
-
-            # MCP sessions 已关闭（退出 async with）
-            yield "data: [DONE]\n\n"
-        except RETRYABLE_EXCEPTIONS:
-            logger.error(f'对话超时（已重试 {MAX_RETRIES} 次）: thread_id={request.thread_id}')
-            yield _sse({
-                "request_id": request_id,
-                "type": "error",
-                "error": f"模型响应超时，请稍后重试（已自动重试 {MAX_RETRIES} 次）",
-            })
-            yield "data: [DONE]\n\n"
-        except Exception as e:
-            logger.exception(f'对话异常: {e}')
-            # 非重试异常也回滚，防止残缺消息污染历史
-            if agent is not None and pre_request_messages is not None:
-                await rollback_checkpoint_state(agent, config, pre_request_messages, "[SSE]")
-            yield _sse({"request_id": request_id, "type": "error", "error": str(e)})
-            yield "data: [DONE]\n\n"
-        finally:
-            _cancel_events.pop(request.thread_id, None)
-
-    return make_sse_response(event_stream())
+    run.task = asyncio.create_task(
+        _run_chat_completion(run, request, input_data, mcp_connections, current_user),
+        name=f'chat-completions-{request.thread_id}',
+    )
+    logger.info(f'[SSE] 后台任务已启动: thread_id={request.thread_id}, request_id={run.request_id}')
+    return make_sse_response(_stream_events_from_run(run))
 
 
 @chatController.post('/stop', summary='终止会话', description='终止指定会话的流式输出')
@@ -212,6 +430,19 @@ async def stop_chat(
     return ResponseUtil.success(msg='会话终止请求已发送')
 
 
+@chatController.get('/stream/reconnect', summary='重连流式会话', description='页面刷新后，重新订阅正在运行的会话流')
+async def reconnect_chat_stream(
+        thread_id: str = Query(..., description='会话线程ID'),
+        current_user: CurrentUserModel = Depends(LoginService.get_current_user),
+):
+    """重连一个正在运行的流式会话（不会重新触发模型推理）。"""
+    run = await _get_active_run(thread_id)
+    if run is None:
+        return ResponseUtil.failure(msg=f'会话不在运行中: {thread_id}')
+    logger.info(f'会话流重连: thread_id={thread_id}, user={current_user.user.user_name}, mode={run.mode}')
+    return make_sse_response(_stream_events_from_run(run))
+
+
 @chatController.post('/answer', summary='回答问题', description='响应 ask_user_question 工具的提问，恢复被中断的对话')
 async def answer_question(
         request: AnswerRequest,
@@ -219,64 +450,53 @@ async def answer_question(
         current_user: CurrentUserModel = Depends(LoginService.get_current_user),
 ):
     """
-    回答 ask_user_question 工具的提问，恢复中断的对话
+    回答 ask_user_question 工具提问，恢复被中断对话。
 
-    流程: 获取提供商配置 → 创建模型 → 重建 agent → Command(resume=answers) 恢复执行 → 流式输出
-    支持通过 mcp_config_ids 动态加载 MCP 工具
+    行为与 /completions 一致：后台运行 + 可重连流。
     """
-    # 1. 提前从数据库获取MCP配置
+    request_signature = _build_request_signature(
+        request.model_dump(mode='json', by_alias=True, exclude_none=False)
+    )
+
+    active_run = await _get_active_run(request.thread_id)
+    if active_run is not None:
+        _assert_reconnectable(active_run, 'answer', request_signature)
+        logger.info(f'[Answer SSE] 检测到会话重连: thread_id={request.thread_id}, mode=answer')
+        return make_sse_response(_stream_events_from_run(active_run))
+
     mcp_connections = {}
     if request.mcp_config_ids:
         db_configs = await McpconfigDao.get_mcpconfig_by_ids(query_db, request.mcp_config_ids)
         mcp_connections = build_connections_from_db_configs(db_configs)
         logger.info(f'[Answer] 加载 {len(mcp_connections)} 个MCP服务器配置: {list(mcp_connections.keys())}')
 
-    config = {"configurable": {"thread_id": request.thread_id}}
+    async with _stream_runs_lock:
+        current_run = _stream_runs.get(request.thread_id)
+        if current_run is not None and not current_run.finished:
+            run = current_run
+            created = False
+        else:
+            run = _StreamRun(
+                thread_id=request.thread_id,
+                request_id=str(uuid4()),
+                mode='answer',
+                request_signature=request_signature,
+            )
+            _stream_runs[request.thread_id] = run
+            _cancel_events[request.thread_id] = run.cancel_event
+            created = True
 
-    # 注册取消事件
-    cancel_event = asyncio.Event()
-    _cancel_events[request.thread_id] = cancel_event
+    if not created:
+        _assert_reconnectable(run, 'answer', request_signature)
+        logger.info(f'[Answer SSE] 并发场景复用已存在运行: thread_id={request.thread_id}, mode=answer')
+        return make_sse_response(_stream_events_from_run(run))
 
-    async def event_stream():
-        request_id = str(uuid4())
-        try:
-            async with mcp_tools_context(servers=mcp_connections) as mcp_tools:
-                _, agent = await create_agent_and_model(
-                    query_db, request.provider_key, request.model,
-                    request.enable_thinking, request.enable_web_search,
-                    current_user.user.user_id, request.thread_id,
-                    log_prefix="[Answer] ",
-                    mcp_tools=mcp_tools if mcp_tools else None,
-                    skill_ids=request.skill_ids,
-                )
-
-                async for sse_line in process_stream_chunks(
-                    agent,
-                    Command(resume=request.answers),
-                    config,
-                    request_id=request_id,
-                    cancel_event=cancel_event,
-                    enable_thinking=request.enable_thinking,
-                    user_id=current_user.user.user_id,
-                    thread_id=request.thread_id,
-                    log_prefix="[Answer SSE]",
-                ):
-                    yield sse_line
-
-                # 恢复后也需检查是否再次被中断（agent 可能连续提问）
-                async for sse_line in check_interrupts(agent, config, request_id, "[Answer SSE]"):
-                    yield sse_line
-
-            yield "data: [DONE]\n\n"
-        except Exception as e:
-            logger.exception(f'[Answer] 对话恢复异常: {e}')
-            yield _sse({"request_id": request_id, "type": "error", "error": str(e)})
-            yield "data: [DONE]\n\n"
-        finally:
-            _cancel_events.pop(request.thread_id, None)
-
-    return make_sse_response(event_stream())
-
+    run.task = asyncio.create_task(
+        _run_answer_completion(run, request, mcp_connections, current_user),
+        name=f'chat-answer-{request.thread_id}',
+    )
+    logger.info(f'[Answer SSE] 后台任务已启动: thread_id={request.thread_id}, request_id={run.request_id}')
+    return make_sse_response(_stream_events_from_run(run))
 
 def _get_msg_timestamp(msg, ts_map: dict[str, str] | None = None) -> Optional[str]:
     """

@@ -20,8 +20,9 @@ from module_llm.skills.entity.vo.skill_vo import SkillModel, SkillFileModel
 from utils.log_util import logger
 
 
-# 与 deepagent_factory.py 中的 SKILLS_ROOT 保持一致
-SKILLS_ROOT = os.path.join("CaseGo", "skills")
+# 与 deepagent_factory.py 中的 SKILLS_ROOT 保持一致（使用绝对路径避免 CWD 相关问题）
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+SKILLS_ROOT = os.path.join(_PROJECT_ROOT, "CaseGo", "skills")
 
 # 每个 skill_name 一个锁，防止并发写入冲突
 _sync_locks: dict[str, asyncio.Lock] = {}
@@ -106,6 +107,9 @@ class SkillSyncService:
         :param files: LlmSkillFile ORM 对象列表
         """
         skill_dir = os.path.join(SKILLS_ROOT, skill_name)
+
+        # 确保父目录存在（首次导入时 CaseGo/skills/ 可能不存在）
+        os.makedirs(SKILLS_ROOT, exist_ok=True)
 
         # 清空并重建目录，确保与数据库一致
         if os.path.exists(skill_dir):

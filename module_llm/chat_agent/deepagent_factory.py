@@ -99,9 +99,7 @@ class _WindowsCompatShellBackend(LocalShellBackend):
         if ".." in relative.split("/"):
             return None
 
-        # 项目根目录：与 SKILLS_ROOT 定义一致
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        real_path = os.path.join(project_root, SKILLS_ROOT, relative)
+        real_path = os.path.join(SKILLS_ROOT, relative)
 
         # 文件或其父目录存在即视为有效
         if os.path.exists(real_path) or os.path.exists(os.path.dirname(real_path)):
@@ -274,7 +272,9 @@ class _FilteredFilesystemBackend(FilesystemBackend):
 WORKSPACE_ROOT = os.path.join("CaseGo", "agent_workspace")
 
 # 共享技能目录（全用户可读，不受用户隔离限制）
-SKILLS_ROOT = os.path.join("CaseGo", "skills")
+# 使用绝对路径，避免 CWD 不同导致 FilesystemBackend 无法解析
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+SKILLS_ROOT = os.path.join(_PROJECT_ROOT, "CaseGo", "skills")
 
 
 def _get_postgres_uri() -> str:
@@ -370,6 +370,7 @@ async def create_deep_agent_instance(
         # 共享技能目录：所有用户可读，通过 /skills/ 虚拟路径访问
         # 按需加载时使用 _FilteredFilesystemBackend 过滤根级别 ls_info，
         # 使 SkillsMiddleware 只发现指定的技能目录
+        os.makedirs(SKILLS_ROOT, exist_ok=True)  # 确保目录存在，避免导入后沙盒无法访问
         if allowed_skill_names is not None:
             skills_backend = _FilteredFilesystemBackend(
                 root_dir=SKILLS_ROOT,
