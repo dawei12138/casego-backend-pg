@@ -113,3 +113,37 @@ class SkillFilesBatchSaveModel(BaseModel):
 
     files: List[SkillFileContentSaveModel] = Field(default_factory=list, description='Files to save')
     sync_all: Optional[bool] = Field(default=False, description='Whether to run full skills sync after save')
+
+
+class SkillFolderCreateModel(BaseModel):
+    """Create a subfolder inside a skill directory."""
+
+    model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
+
+    folder_path: str = Field(description='Relative folder path to create (e.g. "references" or "references/sub")')
+
+
+class SkillFolderRenameModel(BaseModel):
+    """Rename a subfolder inside a skill directory."""
+
+    model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
+
+    old_path: str = Field(description='Current relative folder path')
+    new_path: str = Field(description='New relative folder path')
+
+
+class SkillFolderDeleteModel(BaseModel):
+    """Delete a subfolder and all files inside it."""
+
+    model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
+
+    folder_path: str = Field(description='Relative folder path to delete')
+
+
+class SkillFileMoveModel(BaseModel):
+    """Move a file to a new path within the same skill."""
+
+    model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
+
+    old_path: str = Field(description='Current relative file path')
+    new_path: str = Field(description='New relative file path')

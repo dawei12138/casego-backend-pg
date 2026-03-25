@@ -27,6 +27,8 @@ ENV TZ=Asia/Shanghai \
 
 WORKDIR /app
 
+RUN pip install pytest-auto-api2-cli -i https://pypi.tuna.tsinghua.edu.cn/simple
+
 COPY ./requirements.txt /tmp/app_src/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/app_src/requirements.txt \
     -i https://mirrors.aliyun.com/pypi/simple/ \

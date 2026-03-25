@@ -16,6 +16,8 @@ from module_llm.skills.entity.vo.skill_vo import (
     DeleteSkillModel, SkillModel, SkillPageQueryModel,
     SkillFileModel, SkillDetailModel, SkillImportUrlModel,
     SkillFileContentSaveModel, SkillFilesBatchSaveModel,
+    SkillFolderCreateModel, SkillFolderRenameModel,
+    SkillFolderDeleteModel, SkillFileMoveModel,
 )
 from module_llm.skills.service.skill_sync_service import SkillSyncService
 from module_llm.skills.service.skill_import_service import SkillImportService
@@ -560,12 +562,244 @@ description: {page_object.description or ''}
             if skill and skill.enabled:
                 await SkillSyncService.sync_skill(query_db, skill.skill_name)
 
-            return CrudResponseModel(is_success=True, message='??????')
+            return CrudResponseModel(is_success=True, message='删除文件成功')
         except Exception as e:
             await query_db.rollback()
             raise e
 
-    # ==================== ?? ====================
+    # ==================== 文件夹管理 ====================
+
+    @classmethod
+    def _normalize_folder_path(cls, folder_path: str) -> str:
+        """
+        Normalize and validate a folder path. Returns path WITH trailing slash stripped.
+        """
+        if not folder_path:
+            raise ServiceException(message='folder_path cannot be empty')
+        raw = folder_path.strip().replace('\\', '/')
+        # Strip leading/trailing slashes
+        raw = raw.strip('/')
+        if not raw:
+            raise ServiceException(message='folder_path cannot be empty')
+        parts = [p for p in raw.split('/') if p and p != '.']
+        if not parts:
+            raise ServiceException(message='folder_path cannot be empty')
+        if any(part == '..' for part in parts):
+            raise ServiceException(message=f'illegal folder path: {folder_path}')
+        if ':' in parts[0]:
+            raise ServiceException(message=f'illegal folder path: {folder_path}')
+        return '/'.join(parts)
+
+    @classmethod
+    async def create_skill_folder_services(
+        cls, query_db: AsyncSession, skill_id, folder_model: SkillFolderCreateModel, operator: str
+    ):
+        """
+        Create a subfolder by adding a .gitkeep placeholder file.
+        """
+        skill = await SkillDao.get_skill_detail_by_id(query_db, skill_id)
+        if not skill:
+            raise ServiceException(message='Skill not found')
+
+        folder_path = cls._normalize_folder_path(folder_model.folder_path)
+        gitkeep_path = f'{folder_path}/.gitkeep'
+
+        # Check if folder already has files
+        existing_files = await SkillFileDao.get_files_by_path_prefix(
+            query_db, skill_id, f'{folder_path}/'
+        )
+        if existing_files:
+            raise ServiceException(message=f'文件夹 {folder_path} 已存在')
+
+        now = datetime.now()
+        try:
+            await SkillFileDao.add_file_dao(
+                query_db,
+                SkillFileModel(
+                    skill_id=skill_id,
+                    file_path=gitkeep_path,
+                    content='',
+                    is_binary=False,
+                    create_by=operator,
+                    create_time=now,
+                    update_by=operator,
+                    update_time=now,
+                ),
+            )
+            await query_db.commit()
+
+            if skill.enabled:
+                await SkillSyncService.sync_skill(query_db, skill.skill_name)
+
+            return {'skillId': str(skill_id), 'folderPath': folder_path, 'action': 'created'}
+        except ServiceException:
+            await query_db.rollback()
+            raise
+        except Exception as e:
+            await query_db.rollback()
+            raise e
+
+    @classmethod
+    async def rename_skill_folder_services(
+        cls, query_db: AsyncSession, skill_id, folder_model: SkillFolderRenameModel, operator: str
+    ):
+        """
+        Rename a subfolder by updating all file paths with the old prefix to the new prefix.
+        """
+        skill = await SkillDao.get_skill_detail_by_id(query_db, skill_id)
+        if not skill:
+            raise ServiceException(message='Skill not found')
+
+        old_path = cls._normalize_folder_path(folder_model.old_path)
+        new_path = cls._normalize_folder_path(folder_model.new_path)
+
+        if old_path == new_path:
+            raise ServiceException(message='新旧文件夹路径相同')
+
+        old_prefix = f'{old_path}/'
+        new_prefix = f'{new_path}/'
+
+        # Check source folder has files
+        source_files = await SkillFileDao.get_files_by_path_prefix(query_db, skill_id, old_prefix)
+        if not source_files:
+            raise ServiceException(message=f'文件夹 {old_path} 不存在或为空')
+
+        # Check target folder doesn't already exist
+        target_files = await SkillFileDao.get_files_by_path_prefix(query_db, skill_id, new_prefix)
+        if target_files:
+            raise ServiceException(message=f'目标文件夹 {new_path} 已存在')
+
+        now = datetime.now()
+        try:
+            for file_obj in source_files:
+                new_file_path = new_prefix + file_obj.file_path[len(old_prefix):]
+                await SkillFileDao.edit_file_dao(
+                    query_db,
+                    {
+                        'file_id': file_obj.file_id,
+                        'file_path': new_file_path,
+                        'update_by': operator,
+                        'update_time': now,
+                    },
+                )
+            await query_db.commit()
+
+            if skill.enabled:
+                await SkillSyncService.sync_skill(query_db, skill.skill_name)
+
+            return {
+                'skillId': str(skill_id),
+                'oldPath': old_path,
+                'newPath': new_path,
+                'filesRenamed': len(source_files),
+            }
+        except ServiceException:
+            await query_db.rollback()
+            raise
+        except Exception as e:
+            await query_db.rollback()
+            raise e
+
+    @classmethod
+    async def delete_skill_folder_services(
+        cls, query_db: AsyncSession, skill_id, folder_model: SkillFolderDeleteModel
+    ):
+        """
+        Delete a subfolder and all files inside it.
+        """
+        skill = await SkillDao.get_skill_detail_by_id(query_db, skill_id)
+        if not skill:
+            raise ServiceException(message='Skill not found')
+
+        folder_path = cls._normalize_folder_path(folder_model.folder_path)
+        prefix = f'{folder_path}/'
+
+        # Check folder has files
+        files = await SkillFileDao.get_files_by_path_prefix(query_db, skill_id, prefix)
+        if not files:
+            raise ServiceException(message=f'文件夹 {folder_path} 不存在或为空')
+
+        try:
+            await SkillFileDao.batch_delete_by_path_prefix(query_db, skill_id, prefix)
+            await query_db.commit()
+
+            if skill.enabled:
+                await SkillSyncService.sync_skill(query_db, skill.skill_name)
+
+            return {
+                'skillId': str(skill_id),
+                'folderPath': folder_path,
+                'filesDeleted': len(files),
+            }
+        except Exception as e:
+            await query_db.rollback()
+            raise e
+
+    @classmethod
+    async def move_skill_file_services(
+        cls, query_db: AsyncSession, skill_id, move_model: SkillFileMoveModel, operator: str
+    ):
+        """
+        Move a file to a new path within the same skill.
+        """
+        skill = await SkillDao.get_skill_detail_by_id(query_db, skill_id)
+        if not skill:
+            raise ServiceException(message='Skill not found')
+
+        old_path = cls._normalize_skill_file_path(move_model.old_path)
+        new_path = cls._normalize_skill_file_path(move_model.new_path)
+
+        if old_path == new_path:
+            raise ServiceException(message='新旧文件路径相同')
+
+        # Check source file exists
+        source_file = await SkillFileDao.get_file_by_path(query_db, skill_id, old_path)
+        if not source_file:
+            raise ServiceException(message=f'文件 {old_path} 不存在')
+
+        # Check target path not occupied
+        target_file = await SkillFileDao.get_file_by_path(query_db, skill_id, new_path)
+        if target_file:
+            raise ServiceException(message=f'目标路径 {new_path} 已有文件')
+
+        now = datetime.now()
+        try:
+            await SkillFileDao.edit_file_dao(
+                query_db,
+                {
+                    'file_id': source_file.file_id,
+                    'file_path': new_path,
+                    'update_by': operator,
+                    'update_time': now,
+                },
+            )
+
+            # If old folder is now empty, clean up .gitkeep if it was the only remaining file
+            old_dir = '/'.join(old_path.split('/')[:-1])
+            if old_dir:
+                remaining = await SkillFileDao.get_files_by_path_prefix(
+                    query_db, skill_id, f'{old_dir}/'
+                )
+                # If only .gitkeep remains and it's the only file, keep it for empty folder tracking
+                # No auto-cleanup needed - user can delete folder explicitly
+
+            await query_db.commit()
+
+            if skill.enabled:
+                await SkillSyncService.sync_skill(query_db, skill.skill_name)
+
+            return {
+                'skillId': str(skill_id),
+                'oldPath': old_path,
+                'newPath': new_path,
+                'action': 'moved',
+            }
+        except ServiceException:
+            await query_db.rollback()
+            raise
+        except Exception as e:
+            await query_db.rollback()
+            raise e
 
     @classmethod
     async def upload_skill_services(cls, query_db: AsyncSession, file_bytes: bytes, filename: str, user_name: str):

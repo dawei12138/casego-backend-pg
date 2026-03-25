@@ -12,6 +12,8 @@ from module_llm.skills.entity.vo.skill_vo import (
     DeleteSkillModel, SkillModel, SkillPageQueryModel,
     SkillFileModel, SkillImportUrlModel,
     SkillFileContentSaveModel, SkillFilesBatchSaveModel,
+    SkillFolderCreateModel, SkillFolderRenameModel,
+    SkillFolderDeleteModel, SkillFileMoveModel,
 )
 from utils.common_util import bytes2file_response
 from utils.log_util import logger
@@ -343,3 +345,79 @@ async def delete_skill_file(
 ):
     result = await SkillService.delete_skill_file_services(query_db, skill_id, file_id)
     return ResponseUtil.success(msg=result.message)
+
+
+# ==================== 文件夹管理 ====================
+
+
+@skillController.post(
+    '/{skill_id}/folder',
+    dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:edit'))],
+    summary='新增技能子文件夹',
+    description='在技能目录下新增子文件夹，自动创建.gitkeep占位文件，自动同步到文件系统',
+)
+async def create_skill_folder(
+    request: Request,
+    skill_id: str,
+    folder_model: SkillFolderCreateModel,
+    query_db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserModel = Depends(LoginService.get_current_user),
+):
+    result = await SkillService.create_skill_folder_services(
+        query_db, skill_id, folder_model, current_user.user.user_name
+    )
+    return ResponseUtil.success(msg='创建文件夹成功', data=result)
+
+
+@skillController.put(
+    '/{skill_id}/folder/rename',
+    dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:edit'))],
+    summary='重命名技能子文件夹',
+    description='重命名技能下的子文件夹，自动更新所有子文件路径，自动同步到文件系统',
+)
+async def rename_skill_folder(
+    request: Request,
+    skill_id: str,
+    folder_model: SkillFolderRenameModel,
+    query_db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserModel = Depends(LoginService.get_current_user),
+):
+    result = await SkillService.rename_skill_folder_services(
+        query_db, skill_id, folder_model, current_user.user.user_name
+    )
+    return ResponseUtil.success(msg='重命名文件夹成功', data=result)
+
+
+@skillController.delete(
+    '/{skill_id}/folder',
+    dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:remove'))],
+    summary='删除技能子文件夹',
+    description='删除技能下的子文件夹及其所有文件，自动同步到文件系统',
+)
+async def delete_skill_folder(
+    request: Request,
+    skill_id: str,
+    folder_model: SkillFolderDeleteModel,
+    query_db: AsyncSession = Depends(get_db),
+):
+    result = await SkillService.delete_skill_folder_services(query_db, skill_id, folder_model)
+    return ResponseUtil.success(msg='删除文件夹成功', data=result)
+
+
+@skillController.put(
+    '/{skill_id}/file/move',
+    dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:edit'))],
+    summary='移动技能文件',
+    description='将技能文件移动到新路径，自动同步到文件系统',
+)
+async def move_skill_file(
+    request: Request,
+    skill_id: str,
+    move_model: SkillFileMoveModel,
+    query_db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserModel = Depends(LoginService.get_current_user),
+):
+    result = await SkillService.move_skill_file_services(
+        query_db, skill_id, move_model, current_user.user.user_name
+    )
+    return ResponseUtil.success(msg='移动文件成功', data=result)

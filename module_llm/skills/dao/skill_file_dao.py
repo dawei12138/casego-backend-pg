@@ -32,6 +32,46 @@ class SkillFileDao:
         return list(result.scalars().all())
 
     @classmethod
+    async def get_files_by_path_prefix(cls, db: AsyncSession, skill_id, prefix: str) -> List[LlmSkillFile]:
+        """
+        获取指定文件夹前缀下的所有文件
+
+        :param db: orm对象
+        :param skill_id: 技能ID
+        :param prefix: 文件夹路径前缀（如 "references/"）
+        :return: 匹配的文件列表
+        """
+        result = await db.execute(
+            select(LlmSkillFile)
+            .where(
+                LlmSkillFile.skill_id == skill_id,
+                LlmSkillFile.file_path.like(f'{prefix}%'),
+                LlmSkillFile.del_flag == "0",
+            )
+            .order_by(LlmSkillFile.file_path)
+        )
+        return list(result.scalars().all())
+
+    @classmethod
+    async def batch_delete_by_path_prefix(cls, db: AsyncSession, skill_id, prefix: str):
+        """
+        批量软删除指定文件夹前缀下的所有文件
+
+        :param db: orm对象
+        :param skill_id: 技能ID
+        :param prefix: 文件夹路径前缀（如 "references/"）
+        """
+        await db.execute(
+            update(LlmSkillFile)
+            .where(
+                LlmSkillFile.skill_id == skill_id,
+                LlmSkillFile.file_path.like(f'{prefix}%'),
+                LlmSkillFile.del_flag == "0",
+            )
+            .values(del_flag="1")
+        )
+
+    @classmethod
     async def get_file_by_id(cls, db: AsyncSession, file_id):
         """
         根据文件ID获取文件信息
