@@ -59,6 +59,8 @@ _cancel_events: dict[str, asyncio.Event] = {}
 # thread_id -> active background run (single active run per thread)
 _stream_runs: dict[str, "_StreamRun"] = {}
 _stream_runs_lock = asyncio.Lock()
+_history_graph: Any | None = None
+_history_graph_lock = asyncio.Lock()
 
 _STREAM_END = object()
 _STREAM_QUEUE_MAXSIZE = 256
@@ -499,27 +501,46 @@ async def answer_question(
     return make_sse_response(_stream_events_from_run(run))
 
 def _get_msg_timestamp(msg, ts_map: dict[str, str] | None = None) -> Optional[str]:
-    """
-    获取消息时间戳（ISO-8601 UTC）。
-
-    优先从 ts_map（checkpoint 历史构建的 message_id→created_at 映射）中查找，
-    其次尝试从消息自身的 response_metadata / additional_kwargs 中提取。
-    """
+    """获取消息时间戳（ISO-8601 UTC）。"""
     msg_id = getattr(msg, 'id', None)
     if ts_map and msg_id and msg_id in ts_map:
         return ts_map[msg_id]
 
-    # response_metadata 里可能有 created_at / timestamp
+    ts = _get_inline_msg_timestamp(msg)
+    if ts:
+        return ts
+    return None
+
+
+def _get_inline_msg_timestamp(msg) -> Optional[str]:
+    """从消息元数据提取时间戳，不依赖 checkpoint 历史。"""
     meta = getattr(msg, 'response_metadata', {}) or {}
     ts = meta.get('created_at') or meta.get('timestamp')
     if ts:
         return str(ts)
-    # additional_kwargs 里可能有
+
     ak = getattr(msg, 'additional_kwargs', {}) or {}
     ts = ak.get('created_at') or ak.get('timestamp')
     if ts:
         return str(ts)
     return None
+
+
+def _collect_turn_start_indices(messages: list) -> list[int]:
+    """返回每个 turn（HumanMessage）在 messages 中的起始索引。"""
+    return [idx for idx, msg in enumerate(messages) if isinstance(msg, HumanMessage)]
+
+
+def _collect_missing_ts_message_ids(messages: list) -> set[str]:
+    """收集当前消息切片中缺少内联时间戳的 message id。"""
+    missing_ids: set[str] = set()
+    for msg in messages:
+        msg_id = getattr(msg, 'id', None)
+        if not msg_id:
+            continue
+        if _get_inline_msg_timestamp(msg) is None:
+            missing_ids.add(msg_id)
+    return missing_ids
 
 
 def _group_messages_to_turns(
@@ -649,16 +670,93 @@ def _group_messages_to_turns(
 
 
 def _create_minimal_graph():
-    """创建最小化的图（仅用于读取历史）"""
+    """Build a minimal graph used only for reading history state."""
     def noop(state: MessagesState):
         return state
 
     builder = StateGraph(MessagesState)
     builder.add_node("noop", noop)
-    builder.add_node("tools", noop)  # 匹配实际 agent 图的节点名，避免 checkpoint 恢复时警告
+    builder.add_node("tools", noop)
     builder.add_edge(START, "noop")
     builder.add_edge("noop", END)
     return builder
+
+
+async def _get_history_graph():
+    """Initialize once and reuse the minimal history graph."""
+    global _history_graph
+    if _history_graph is not None:
+        return _history_graph
+
+    async with _history_graph_lock:
+        if _history_graph is None:
+            checkpointer = await get_checkpointer()
+            builder = _create_minimal_graph()
+            _history_graph = builder.compile(checkpointer=checkpointer)
+    return _history_graph
+
+
+async def _build_needed_timestamps(
+    graph,
+    config: dict,
+    target_message_ids: set[str],
+) -> dict[str, str]:
+    """Build message_id -> created_at only for requested IDs."""
+    unresolved_ids = set(target_message_ids)
+    if not unresolved_ids:
+        return {}
+
+    ts_map: dict[str, str] = {}
+    prev_msgs = None
+    prev_ts = None
+
+    async for snapshot in graph.aget_state_history(config):
+        snap_ts = snapshot.created_at
+        if not snap_ts:
+            continue
+
+        snap_msgs = (snapshot.values or {}).get("messages", []) or []
+        if prev_msgs is not None and prev_ts:
+            cur_len = len(snap_msgs)
+            prev_len = len(prev_msgs)
+
+            if cur_len <= prev_len:
+                for msg in prev_msgs[cur_len:]:
+                    msg_id = getattr(msg, 'id', None)
+                    if msg_id and msg_id in unresolved_ids:
+                        ts_map[msg_id] = prev_ts
+                        unresolved_ids.remove(msg_id)
+            else:
+                prev_ids = {
+                    getattr(msg, 'id', None)
+                    for msg in prev_msgs
+                    if getattr(msg, 'id', None) in unresolved_ids
+                }
+                cur_ids = {
+                    getattr(msg, 'id', None)
+                    for msg in snap_msgs
+                    if getattr(msg, 'id', None) in unresolved_ids
+                }
+                for msg_id in prev_ids - cur_ids:
+                    ts_map[msg_id] = prev_ts
+                    unresolved_ids.remove(msg_id)
+
+        if not unresolved_ids:
+            break
+
+        prev_msgs = snap_msgs
+        prev_ts = snap_ts
+
+    if unresolved_ids and prev_msgs and prev_ts:
+        for msg in prev_msgs:
+            msg_id = getattr(msg, 'id', None)
+            if msg_id and msg_id in unresolved_ids:
+                ts_map[msg_id] = prev_ts
+                unresolved_ids.remove(msg_id)
+                if not unresolved_ids:
+                    break
+
+    return ts_map
 
 
 @chatController.get('/history', summary='获取聊天历史', description='按轮次分页获取指定会话的历史聊天记录')
@@ -668,23 +766,11 @@ async def get_chat_history(
         page_size: int = Query(default=20, ge=1, le=100, description='每页轮次数量'),
         current_user: CurrentUserModel = Depends(LoginService.get_current_user),
 ):
-    """
-    获取聊天历史记录（按轮次分页）
-
-    - 每轮包含用户消息 + AI 响应事件序列（与 SSE 事件格式一致）
-    - 按时间倒序返回，最新的轮次在前
-    - 支持懒加载，前端可以滚动加载更多历史轮次
-    """
+    """获取聊天历史记录（按轮次分页，最新轮次在前）。"""
     try:
-        checkpointer = await get_checkpointer()
-
-        # 使用 checkpointer 编译最小图来读取状态
-        builder = _create_minimal_graph()
-        graph = builder.compile(checkpointer=checkpointer)
-
+        graph = await _get_history_graph()
         config = {"configurable": {"thread_id": thread_id}}
 
-        # 获取当前状态
         state = await graph.aget_state(config)
 
         empty_response = ChatHistoryResponse(
@@ -704,44 +790,27 @@ async def get_chat_history(
         if not all_messages:
             return ResponseUtil.success(data=empty_response.model_dump(by_alias=True))
 
-        # 遍历 checkpoint 历史，构建 message_id → created_at 映射
-        # 每个 snapshot 记录了当时累积的所有消息，通过对比前后差异找到「新增消息」对应的时间戳
-        ts_map: dict[str, str] = {}
-        prev_ids: set[str] = set()
-        history_snapshots = []
-        async for snapshot in graph.aget_state_history(config):
-            history_snapshots.append(snapshot)
-
-        # aget_state_history 按时间倒序返回，反转为正序以便逐步对比
-        for snapshot in reversed(history_snapshots):
-            snap_ts = snapshot.created_at
-            if not snap_ts:
-                continue
-            snap_msgs = (snapshot.values or {}).get("messages", [])
-            cur_ids = set()
-            for m in snap_msgs:
-                mid = getattr(m, 'id', None)
-                if mid:
-                    cur_ids.add(mid)
-                    if mid not in prev_ids:
-                        ts_map[mid] = snap_ts
-            prev_ids = cur_ids
-
-        # 按轮次分组
-        all_turns = _group_messages_to_turns(all_messages, ts_map=ts_map)
-        total = len(all_turns)
+        turn_start_indices = _collect_turn_start_indices(all_messages)
+        total = len(turn_start_indices)
 
         if total == 0:
             return ResponseUtil.success(data=empty_response.model_dump(by_alias=True))
 
-        # 计算分页（倒序，最新的在前）
         pages = math.ceil(total / page_size)
-        start_idx = max(0, total - page * page_size)
-        end_idx = total - (page - 1) * page_size
+        start_turn_idx = max(0, total - page * page_size)
+        end_turn_idx = max(0, total - (page - 1) * page_size)
 
-        # 获取分页数据并倒序（最新的轮次在前）
-        page_turns = all_turns[start_idx:end_idx]
-        page_turns = list(reversed(page_turns))
+        page_turns: list[ConversationTurnModel] = []
+        if start_turn_idx < end_turn_idx:
+            start_msg_idx = turn_start_indices[start_turn_idx]
+            end_msg_idx = turn_start_indices[end_turn_idx] if end_turn_idx < total else len(all_messages)
+            page_messages = all_messages[start_msg_idx:end_msg_idx]
+
+            missing_ts_ids = _collect_missing_ts_message_ids(page_messages)
+            ts_map = await _build_needed_timestamps(graph, config, missing_ts_ids) if missing_ts_ids else {}
+
+            page_turns = _group_messages_to_turns(page_messages, ts_map=ts_map)
+            page_turns = list(reversed(page_turns))
 
         response = ChatHistoryResponse(
             thread_id=thread_id,

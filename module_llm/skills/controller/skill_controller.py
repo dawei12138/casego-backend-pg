@@ -11,6 +11,7 @@ from module_llm.skills.service.skill_service import SkillService
 from module_llm.skills.entity.vo.skill_vo import (
     DeleteSkillModel, SkillModel, SkillPageQueryModel,
     SkillFileModel, SkillImportUrlModel,
+    SkillFileContentSaveModel, SkillFilesBatchSaveModel,
 )
 from utils.common_util import bytes2file_response
 from utils.log_util import logger
@@ -27,8 +28,8 @@ skillController = APIRouter(prefix='/skills/skill', dependencies=[Depends(LoginS
     '/list',
     response_model=PageResponseModel,
     dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:list'))],
-    summary='获取技能列表',
-    description='根据查询条件获取技能分页列表数据',
+    summary='获取技能列表(分页)',
+    description='分页查询技能列表，支持按名称、状态等条件过滤',
 )
 async def get_skill_list(
     request: Request,
@@ -44,8 +45,8 @@ async def get_skill_list(
 @skillController.get(
     '/all',
     dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:list'))],
-    summary='获取所有技能',
-    description='获取所有技能列表（用于下拉选择）',
+    summary='获取全部技能列表',
+    description='获取所有技能的简要信息列表，不分页',
 )
 async def get_skill_all(
     request: Request,
@@ -60,7 +61,7 @@ async def get_skill_all(
     '',
     dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:add'))],
     summary='新增技能',
-    description='手动创建一个新的技能',
+    description='新增一个技能记录，自动创建SKILL.md文件',
 )
 @ValidateFields(validate_model='add_skill')
 async def add_skill(
@@ -81,7 +82,7 @@ async def add_skill(
     '',
     dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:edit'))],
     summary='修改技能',
-    description='根据主键更新技能信息',
+    description='修改技能信息，支持重命名和状态变更',
 )
 @ValidateFields(validate_model='edit_skill')
 async def edit_skill(
@@ -100,7 +101,7 @@ async def edit_skill(
     '/{skill_ids}',
     dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:remove'))],
     summary='删除技能',
-    description='根据主键批量删除技能，多个主键以逗号分隔',
+    description='根据技能ID批量删除技能及其关联文件，同步移除文件系统',
 )
 async def delete_skill(request: Request, skill_ids: str, query_db: AsyncSession = Depends(get_db)):
     delete_skill_obj = DeleteSkillModel(skillIds=skill_ids)
@@ -108,11 +109,25 @@ async def delete_skill(request: Request, skill_ids: str, query_db: AsyncSession 
     return ResponseUtil.success(msg=delete_skill_result.message)
 
 
+@skillController.post(
+    '/sync-all',
+    dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:edit'))],
+    summary='Sync all enabled skills',
+    description='Sync all enabled skills from database to file system',
+)
+async def sync_all_skills(
+    request: Request,
+    query_db: AsyncSession = Depends(get_db),
+):
+    result = await SkillService.sync_all_skills_services(query_db)
+    return ResponseUtil.success(msg='sync all skills success', data=result)
+
+
 @skillController.get(
     '/{skill_id}',
     dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:query'))],
     summary='获取技能详情',
-    description='根据主键获取技能详细信息（含文件列表）',
+    description='根据技能ID查询技能详细信息，包含文件列表',
 )
 async def query_detail_skill(request: Request, skill_id: str, query_db: AsyncSession = Depends(get_db)):
     skill_detail_result = await SkillService.skill_detail_services(query_db, skill_id)
@@ -125,8 +140,8 @@ async def query_detail_skill(request: Request, skill_id: str, query_db: AsyncSes
 @skillController.post(
     '/upload',
     dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:add'))],
-    summary='上传技能包',
-    description='上传ZIP或MD文件导入技能',
+    summary='上传导入技能',
+    description='上传ZIP或MD文件导入技能，自动解析并创建记录',
 )
 async def upload_skill(
     request: Request,
@@ -144,14 +159,14 @@ async def upload_skill(
         return ResponseUtil.failure(msg=str(e))
     except Exception as e:
         logger.exception(e)
-        return ResponseUtil.error(msg=f'上传失败: {str(e)}')
+        return ResponseUtil.error(msg=f'导入失败: {str(e)}')
 
 
 @skillController.post(
     '/import-url',
     dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:add'))],
     summary='URL导入技能',
-    description='从URL地址导入技能（支持SKILL.md原始链接或ZIP文件链接）',
+    description='从URL导入技能，支持SKILL.md直链或ZIP压缩包地址',
 )
 async def import_url_skill(
     request: Request,
@@ -175,7 +190,7 @@ async def import_url_skill(
     '/export',
     dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:export'))],
     summary='导出技能列表',
-    description='导出技能列表数据到Excel文件',
+    description='将技能列表导出为Excel文件下载',
 )
 async def export_skill_list(
     request: Request,
@@ -189,14 +204,14 @@ async def export_skill_list(
     return ResponseUtil.streaming(data=bytes2file_response(skill_export_result))
 
 
-# ==================== 文件操作 ====================
+# ==================== 文件管理 ====================
 
 
 @skillController.get(
     '/{skill_id}/files',
     dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:query'))],
     summary='获取技能文件列表',
-    description='获取技能目录中的所有文件列表（不含内容）',
+    description='获取技能下所有文件的元信息列表，不含文件内容',
 )
 async def get_skill_files(
     request: Request,
@@ -207,19 +222,68 @@ async def get_skill_files(
     return ResponseUtil.success(data=files_result)
 
 
+@skillController.put(
+    '/{skill_id}/file/content',
+    dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:edit'))],
+    summary='Save single skill file content',
+    description='Upsert a single file by filePath and optionally trigger full sync',
+)
+async def save_skill_file_content(
+    request: Request,
+    skill_id: str,
+    file_model: SkillFileContentSaveModel,
+    query_db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserModel = Depends(LoginService.get_current_user),
+):
+    result = await SkillService.save_skill_file_content_services(
+        query_db,
+        skill_id,
+        file_model,
+        current_user.user.user_name,
+    )
+    return ResponseUtil.success(msg='save skill file content success', data=result)
+
+
+@skillController.put(
+    '/{skill_id}/files/content',
+    dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:edit'))],
+    summary='Save batch skill files content',
+    description='Batch upsert files by filePath and optionally trigger full sync',
+)
+async def save_skill_files_batch(
+    request: Request,
+    skill_id: str,
+    batch_model: SkillFilesBatchSaveModel,
+    query_db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserModel = Depends(LoginService.get_current_user),
+):
+    result = await SkillService.save_skill_files_batch_services(
+        query_db,
+        skill_id,
+        batch_model,
+        current_user.user.user_name,
+    )
+    return ResponseUtil.success(msg='save skill files batch success', data=result)
+
+
 @skillController.get(
     '/{skill_id}/file',
     dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:query'))],
     summary='获取技能文件内容',
-    description='根据技能ID和文件相对路径获取文件内容',
+    description='根据技能ID和文件路径获取文件内容',
 )
 async def get_skill_file_content(
     request: Request,
     skill_id: str,
-    file_path: str = Query(..., description='文件相对路径'),
+    file_path: str | None = Query(None, alias='filePath', description='Skill relative file path'),
+    file_path_legacy: str | None = Query(None, alias='file_path', include_in_schema=False),
     query_db: AsyncSession = Depends(get_db),
 ):
-    file_result = await SkillService.get_skill_file_content_services(query_db, skill_id, file_path)
+    target_file_path = file_path or file_path_legacy
+    if not target_file_path:
+        return ResponseUtil.failure(msg='filePath cannot be empty')
+
+    file_result = await SkillService.get_skill_file_content_services(query_db, skill_id, target_file_path)
     return ResponseUtil.success(data=file_result)
 
 
@@ -227,7 +291,7 @@ async def get_skill_file_content(
     '/{skill_id}/file',
     dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:add'))],
     summary='新增技能文件',
-    description='向技能目录中添加新文件',
+    description='为指定技能新增一个文件',
 )
 async def add_skill_file(
     request: Request,
@@ -248,8 +312,8 @@ async def add_skill_file(
 @skillController.put(
     '/{skill_id}/file',
     dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:edit'))],
-    summary='编辑技能文件',
-    description='更新技能目录中的文件内容',
+    summary='修改技能文件',
+    description='修改技能下指定文件的信息或内容',
 )
 async def edit_skill_file(
     request: Request,
@@ -269,7 +333,7 @@ async def edit_skill_file(
     '/{skill_id}/file/{file_id}',
     dependencies=[Depends(CheckUserInterfaceAuth('skills:skill:remove'))],
     summary='删除技能文件',
-    description='从技能目录中删除指定文件',
+    description='删除技能下指定的文件',
 )
 async def delete_skill_file(
     request: Request,

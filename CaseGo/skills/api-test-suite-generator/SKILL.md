@@ -1,5 +1,5 @@
 ---
-name: api-test-suite-generator
+name: API Test Suite Generator
 description: Automatically generate comprehensive API test suites from OpenAPI specifications covering CRUD operations, error handling, authentication, pagination, and edge cases
 version: 1.0.0
 author: Pramod
@@ -1424,4 +1424,3 @@ test('should match OpenAPI response schema', async ({ request }) => {
 6. **Use request IDs** -- Include a unique `X-Request-ID` header in every test request. When investigating server-side logs, this header links test failures to specific server log entries.
 7. **Test locally first** -- Before debugging a CI failure, reproduce it locally with the same environment configuration. Network issues, DNS resolution, and certificate problems are common CI-specific causes.
 8. **Monitor test flakiness** -- Track tests that fail intermittently. Common causes include: race conditions in async operations, time-dependent assertions, shared test data, and external service dependencies. Quarantine flaky tests and fix root causes rather than adding retries.
-

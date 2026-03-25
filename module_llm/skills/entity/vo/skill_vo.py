@@ -1,37 +1,37 @@
 from datetime import datetime
+from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 from pydantic_validation_decorator import NotBlank
-from typing import Optional, List
+
 from module_admin.annotation.pydantic_annotation import as_query
 
 
 class SkillModel(BaseModel):
-    """
-    AI技能配置表对应pydantic模型
-    """
+    """Skill metadata model."""
+
     model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
 
-    skill_id: Optional[UUID] = Field(default=None, description='技能唯一标识符(UUID)')
-    skill_name: Optional[str] = Field(default=None, description='技能目录名（英文标识符）')
-    display_name: Optional[str] = Field(default=None, description='技能显示名称')
-    description: Optional[str] = Field(default=None, description='技能描述')
-    enabled: Optional[bool] = Field(default=None, description='是否启用')
-    source_type: Optional[str] = Field(default=None, description='来源类型: manual / upload / url')
-    source_url: Optional[str] = Field(default=None, description='URL导入源地址')
-    allowed_tools: Optional[str] = Field(default=None, description='允许的工具列表')
-    license_info: Optional[str] = Field(default=None, description='许可证信息')
-    create_by: Optional[str] = Field(default=None, description='')
-    create_time: Optional[datetime] = Field(default=None, description='创建时间')
-    update_by: Optional[str] = Field(default=None, description='')
-    update_time: Optional[datetime] = Field(default=None, description='更新时间')
-    remark: Optional[str] = Field(default=None, description='')
-    sort_no: Optional[float] = Field(default=None, description='')
-    del_flag: Optional[str] = Field(default=None, description='')
+    skill_id: Optional[UUID] = Field(default=None, description='Skill UUID')
+    skill_name: Optional[str] = Field(default=None, description='Skill directory name')
+    display_name: Optional[str] = Field(default=None, description='Display name')
+    description: Optional[str] = Field(default=None, description='Description')
+    enabled: Optional[bool] = Field(default=None, description='Enabled flag')
+    source_type: Optional[str] = Field(default=None, description='Source type: manual/upload/url')
+    source_url: Optional[str] = Field(default=None, description='Source URL')
+    allowed_tools: Optional[str] = Field(default=None, description='Allowed tools list')
+    license_info: Optional[str] = Field(default=None, description='License info')
+    create_by: Optional[str] = Field(default=None, description='Creator')
+    create_time: Optional[datetime] = Field(default=None, description='Create time')
+    update_by: Optional[str] = Field(default=None, description='Updater')
+    update_time: Optional[datetime] = Field(default=None, description='Update time')
+    remark: Optional[str] = Field(default=None, description='Remark')
+    sort_no: Optional[float] = Field(default=None, description='Sort number')
+    del_flag: Optional[str] = Field(default=None, description='Delete flag')
 
-    @NotBlank(field_name='skill_name', message='技能目录名不能为空')
+    @NotBlank(field_name='skill_name', message='skill_name cannot be empty')
     def get_skill_name(self):
         return self.skill_name
 
@@ -40,65 +40,76 @@ class SkillModel(BaseModel):
 
 
 class SkillQueryModel(SkillModel):
-    model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
+    """Skill query model (non-paged)."""
 
-    """
-    技能不分页查询模型
-    """
-    pass
+    model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
 
 
 @as_query
 class SkillPageQueryModel(SkillQueryModel):
+    """Skill page query model."""
+
     model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
 
-    """
-    技能分页查询模型
-    """
-    page_num: int = Field(default=1, description='当前页码')
-    page_size: int = Field(default=10, description='每页记录数')
+    page_num: int = Field(default=1, description='Page number')
+    page_size: int = Field(default=10, description='Page size')
 
 
 class DeleteSkillModel(BaseModel):
-    """
-    删除技能模型
-    """
+    """Delete skill request model."""
+
     model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
 
-    skill_ids: str = Field(description='需要删除的技能ID，多个逗号分隔')
+    skill_ids: str = Field(description='Comma-separated skill UUIDs')
 
 
 class SkillFileModel(BaseModel):
+    """Skill file model."""
 
-    """
-    技能文件对应pydantic模型
-    """
     model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
 
-    file_id: Optional[UUID] = Field(default=None, description='文件唯一标识符(UUID)')
-    skill_id: Optional[UUID] = Field(default=None, description='所属技能ID')
-    file_path: Optional[str] = Field(default=None, description='文件相对路径')
-    content: Optional[str] = Field(default=None, description='文件内容')
-    is_binary: Optional[bool] = Field(default=False, description='是否二进制文件')
-    create_by: Optional[str] = Field(default=None, description='')
-    create_time: Optional[datetime] = Field(default=None, description='创建时间')
-    update_by: Optional[str] = Field(default=None, description='')
-    update_time: Optional[datetime] = Field(default=None, description='更新时间')
-    del_flag: Optional[str] = Field(default=None, description='')
+    file_id: Optional[UUID] = Field(default=None, description='File UUID')
+    skill_id: Optional[UUID] = Field(default=None, description='Skill UUID')
+    file_path: Optional[str] = Field(default=None, description='Relative file path')
+    content: Optional[str] = Field(default=None, description='File content')
+    is_binary: Optional[bool] = Field(default=False, description='Binary file flag')
+    create_by: Optional[str] = Field(default=None, description='Creator')
+    create_time: Optional[datetime] = Field(default=None, description='Create time')
+    update_by: Optional[str] = Field(default=None, description='Updater')
+    update_time: Optional[datetime] = Field(default=None, description='Update time')
+    del_flag: Optional[str] = Field(default=None, description='Delete flag')
 
 
 class SkillDetailModel(SkillModel):
-    """
-    技能详情（含文件列表）
-    """
-    files: Optional[List[SkillFileModel]] = Field(default=None, description='技能文件列表')
+    """Skill detail model with file list."""
+
+    files: Optional[List[SkillFileModel]] = Field(default=None, description='Skill files')
 
 
 class SkillImportUrlModel(BaseModel):
-    """
-    URL导入模型
-    """
+    """Import skill from URL."""
+
     model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
 
-    url: str = Field(description='导入URL地址')
-    skill_name: Optional[str] = Field(default=None, description='技能目录名（可选，自动从URL推断）')
+    url: str = Field(description='Import URL')
+    skill_name: Optional[str] = Field(default=None, description='Optional skill directory name')
+
+
+class SkillFileContentSaveModel(BaseModel):
+    """Save single skill file content (upsert by file_path)."""
+
+    model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
+
+    file_path: str = Field(description='Relative file path inside skill directory')
+    content: str = Field(default='', description='File text content')
+    is_binary: Optional[bool] = Field(default=False, description='Binary file flag')
+    sync_all: Optional[bool] = Field(default=False, description='Whether to run full skills sync after save')
+
+
+class SkillFilesBatchSaveModel(BaseModel):
+    """Save batch skill file content."""
+
+    model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
+
+    files: List[SkillFileContentSaveModel] = Field(default_factory=list, description='Files to save')
+    sync_all: Optional[bool] = Field(default=False, description='Whether to run full skills sync after save')
