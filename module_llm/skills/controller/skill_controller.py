@@ -3,6 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Form, Query, Request, UploadFile, File
 from pydantic_validation_decorator import ValidateFields
 from sqlalchemy.ext.asyncio import AsyncSession
+from exceptions.exception import ServiceException
 from config.get_db import get_db
 from module_admin.aspect.interface_auth import CheckUserInterfaceAuth
 from module_admin.system.entity.vo.user_vo import CurrentUserModel
@@ -72,12 +73,18 @@ async def add_skill(
     query_db: AsyncSession = Depends(get_db),
     current_user: CurrentUserModel = Depends(LoginService.get_current_user),
 ):
-    add_skill.create_by = current_user.user.user_name
-    add_skill.create_time = datetime.now()
-    add_skill.update_by = current_user.user.user_name
-    add_skill.update_time = datetime.now()
-    add_skill_result = await SkillService.add_skill_services(query_db, add_skill)
-    return ResponseUtil.success(msg=add_skill_result.message)
+    try:
+        add_skill.create_by = current_user.user.user_name
+        add_skill.create_time = datetime.now()
+        add_skill.update_by = current_user.user.user_name
+        add_skill.update_time = datetime.now()
+        add_skill_result = await SkillService.add_skill_services(query_db, add_skill)
+        return ResponseUtil.success(msg=add_skill_result.message)
+    except ServiceException as e:
+        return ResponseUtil.failure(msg=e.message or str(e))
+    except Exception as e:
+        logger.exception(e)
+        return ResponseUtil.error(msg=str(e))
 
 
 @skillController.put(

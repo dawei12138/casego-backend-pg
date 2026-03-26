@@ -109,12 +109,14 @@ class SkillService:
         """
         # ????????
         if not SkillImportService.validate_skill_name(page_object.skill_name):
-            raise ServiceException(message=f'????????: {page_object.skill_name}????????????????')
+            raise ServiceException(
+                message=f'技能名称不合法: {page_object.skill_name}（仅允许小写字母、数字和连字符）'
+            )
 
         # ?????
         existing = await SkillDao.get_skill_by_name(query_db, page_object.skill_name)
         if existing:
-            raise ServiceException(message=f'?? {page_object.skill_name} ???')
+            raise ServiceException(message=f'技能 {page_object.skill_name} 已存在')
 
         try:
             db_skill = await SkillDao.add_skill_dao(query_db, page_object)
@@ -153,7 +155,7 @@ description: {page_object.description or ''}
             if page_object.enabled is not False:
                 await SkillSyncService.sync_skill(query_db, page_object.skill_name)
 
-            return CrudResponseModel(is_success=True, message='????')
+            return CrudResponseModel(is_success=True, message='新增技能成功')
         except ServiceException:
             await query_db.rollback()
             raise
@@ -181,11 +183,11 @@ description: {page_object.description or ''}
                 if page_object.skill_name and page_object.skill_name != old_skill_name:
                     if not SkillImportService.validate_skill_name(page_object.skill_name):
                         raise ServiceException(
-                            message=f'????????: {page_object.skill_name}'
+                            message=f'技能名称不合法: {page_object.skill_name}（仅允许小写字母、数字和连字符）'
                         )
                     existing = await SkillDao.get_skill_by_name(query_db, page_object.skill_name)
                     if existing:
-                        raise ServiceException(message=f'?? {page_object.skill_name} ???')
+                        raise ServiceException(message=f'技能 {page_object.skill_name} 已存在')
 
                 await SkillDao.edit_skill_dao(query_db, edit_skill)
                 await query_db.commit()
