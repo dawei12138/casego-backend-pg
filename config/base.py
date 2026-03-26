@@ -7,7 +7,7 @@
 @Date    ：2025-07-02 14:04
 """
 from sqlalchemy.ext.asyncio import AsyncAttrs
-from sqlalchemy import DateTime, Integer, Column, String, Float, func, text
+from sqlalchemy import DateTime, Integer, Column, String, Float, func, text, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 
@@ -33,6 +33,6 @@ class Base(AsyncAttrs, DeclarativeBase):
     )
 
     remark = Column(String(500), nullable=True)
-    description = Column(String(500), nullable=True)
+    description = Column(Text, nullable=True)
     sort_no = Column(Float, nullable=True, default=1)
     del_flag = Column(String(1), nullable=True, default="0")

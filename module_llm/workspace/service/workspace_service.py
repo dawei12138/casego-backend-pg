@@ -84,24 +84,41 @@ class WorkspaceService:
         if not workspace.exists():
             return FileTreeResponse(thread_id=thread_id, files=[], total=0)
 
+        # 遍历时需要跳过的目录（如 node_modules、.git 等）
+        _SKIP_DIRS = {'node_modules', '.git', '__pycache__', '.venv', 'venv'}
+
         entries = []
-        for item in sorted(workspace.rglob('*')):
-            rel_path = str(item.relative_to(workspace)).replace('\\', '/')
-            stat = item.stat()
-            is_file = item.is_file()
-            mime_type = None
-            if is_file:
-                mime_type, _ = mimetypes.guess_type(str(item))
-                mime_type = mime_type or 'application/octet-stream'
-            entries.append(FileEntryModel(
-                name=item.name,
-                path=rel_path,
-                type=FileType.DIRECTORY if item.is_dir() else FileType.FILE,
-                size=stat.st_size if is_file else 0,
-                mime_type=mime_type,
-                created_time=datetime.fromtimestamp(stat.st_ctime),
-                modified_time=datetime.fromtimestamp(stat.st_mtime),
-            ))
+        dirs_to_walk = [workspace]
+        while dirs_to_walk:
+            current = dirs_to_walk.pop()
+            try:
+                children = sorted(current.iterdir())
+            except (OSError, PermissionError):
+                continue
+            for item in children:
+                if item.name in _SKIP_DIRS and item.is_dir():
+                    continue
+                rel_path = str(item.relative_to(workspace)).replace('\\', '/')
+                try:
+                    stat = item.stat()
+                except (OSError, PermissionError):
+                    continue
+                is_file = item.is_file()
+                if item.is_dir():
+                    dirs_to_walk.append(item)
+                mime_type = None
+                if is_file:
+                    mime_type, _ = mimetypes.guess_type(str(item))
+                    mime_type = mime_type or 'application/octet-stream'
+                entries.append(FileEntryModel(
+                    name=item.name,
+                    path=rel_path,
+                    type=FileType.DIRECTORY if item.is_dir() else FileType.FILE,
+                    size=stat.st_size if is_file else 0,
+                    mime_type=mime_type,
+                    created_time=datetime.fromtimestamp(stat.st_ctime),
+                    modified_time=datetime.fromtimestamp(stat.st_mtime),
+                ))
 
         return FileTreeResponse(thread_id=thread_id, files=entries, total=len(entries))
 
