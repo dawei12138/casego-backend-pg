@@ -1,4 +1,4 @@
 # -*- coding: utf-8 -*-
 """
-LLM模型配置模块
+module_llm v2: CaseGo LLM runtime and governance modules.
 """

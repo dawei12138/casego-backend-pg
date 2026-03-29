@@ -62,7 +62,7 @@ async def verify_websocket_token(
         redis_token = await redis.get(redis_key)
 
         if token != redis_token:
-            logger.warning('WebSocket Token 与 Redis 中不匹配')
+            # logger.warning('WebSocket Token 与 Redis 中不匹配')
             return None
 
         return {

@@ -71,14 +71,17 @@ from module_app.steps_elements.controller.steps_elements_controller import steps
 from module_app.websocket import agentTransportController
 
 from module_generator.controller.gen_controller import genController
-from module_llm.chat_mcp_config.controller.mcpconfig_controller import mcpconfigController
-from module_llm.skills.controller.skill_controller import skillController
-from module_llm.chat_thread.controller.thread_controller import threadController
+from module_llm.llm_provider.controller.provider_controller import providerController
+from module_llm.llm_agent.controller.agent_controller import agentController
+from module_llm.llm_session.controller.session_controller import sessionController
+from module_llm.llm_run.controller.run_controller import runController
+from module_llm.llm_mcp.controller.mcp_server_controller import mcpServerController
+from module_llm.llm_skill.controller.skill_controller import skillController
+from module_llm.llm_tool.controller.tool_controller import toolController
+from module_llm.llm_memory.controller.memory_controller import memoryController
+from module_llm.llm_observability.controller.observability_controller import observabilityController
 
-from module_llm.llm_provider.controller.provider_config_controller import provider_configController
-from module_llm.chat_agent.controller.chat_controller import chatController
 from module_llm.workspace.controller.workspace_controller import workspaceController
-# from module_llm.chat_agent.graph import close_checkpointer
 
 from sub_applications.handle import handle_sub_applications
 from utils.common_util import worship
@@ -108,7 +111,7 @@ async def lifespan(app: FastAPI):
     await DatabaseTestUtil.run_full_connection_test(app)
 
     # 从文件系统扫描并导入技能，然后同步到文件系统
-    from module_llm.skills.service.skill_sync_service import SkillSyncService
+    from module_llm.llm_skill.service.skill_sync_service import SkillSyncService
     async for db in get_db():
         try:
             await SkillSyncService.scan_and_import(db)
@@ -227,12 +230,17 @@ controller_list = [
     # {'router': agentTransportController, 'tags': ['app代理控制器']},
     # {'router': devicesController, 'tags': ['app设备驱动']},
     # {'router': llmRouter, 'tags': ['AI大模型']},
-    {'router': threadController, 'tags': ['大模型对话线程']},
-    {'router': provider_configController, 'tags': ['大模型配置']},
-    {'router': chatController, 'tags': ['大模型对话']},
+    # ==================== LLM v2 primary surface ====================
+    {'router': providerController, 'tags': ['AI模型提供方管理']},
+    {'router': skillController, 'tags': ['AI技能治理']},
+    {'router': agentController, 'tags': ['AI执行策略管理']},
+    {'router': sessionController, 'tags': ['AI会话管理']},
+    {'router': runController, 'tags': ['AI运行记录与执行']},
+    {'router': mcpServerController, 'tags': ['AI MCP 服务管理']},
+    {'router': toolController, 'tags': ['AI工具治理']},
+    {'router': memoryController, 'tags': ['AI记忆管理']},
+    {'router': observabilityController, 'tags': ['AI运行治理控制台']},
     {'router': workspaceController, 'tags': ['AI工作区文件管理']},
-    {'router': mcpconfigController, 'tags': ['AImcp服务配置']},
-    {'router': skillController, 'tags': ['AI技能管理']},
     # {'router': testController, 'tags': ['测试的']},
 ]
 
