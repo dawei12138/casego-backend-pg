@@ -4,10 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="851b233a-776a-4093-a81e-488998e0c650" name="更改" comment="```&#10;feat(workspace): 工作区服务增加目录遍历优化和性能提升- 在 workspace_service.py 中添加跳过特定目录（node_modules、.git 等）的功能&#10;- 修改文件遍历算法，使用迭代方式替代递归，提高大目录处理性能&#10;- 增加权限检查，避免因权限问题导致的遍历中断-优化文件树响应结构，提升工作区文件操作效率&#10;&#10;refactor(config): 数据库配置优化字段类型定义&#10;&#10;- 在 config/base.py 中导入 Text 类型支持长文本字段- 将 description 字段从 String(500) 修改为 Text 类型，支持更长的描述内容&#10;-保持 remark 字段为 String(500) 类型，满足不同长度需求docs(references): 添加测试相关参考文档- 创建自动化框架参考文档，包含 Screenplay 模式、关键字驱动等高级模式&#10;- 添加 E2E 测试策略文档，涵盖用户流程测试和跨浏览器测试&#10;- 新增集成测试参考，包括 API 测试和数据库测试示例&#10;- 添加性能测试文档，提供 k6 负载测试配置和阈值设置&#10;```">
+    <list default="true" id="851b233a-776a-4093-a81e-488998e0c650" name="更改" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/module_llm/skills/controller/skill_controller.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/skills/controller/skill_controller.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/module_llm/skills/service/skill_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/skills/service/skill_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/controller/chat_controller.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/controller/chat_controller.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/controller/stream_helpers.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/controller/stream_helpers.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -15,6 +15,11 @@
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="dev" />
+      </map>
+    </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="MarkdownSettingsMigration">
@@ -98,6 +103,7 @@
     <recent_temporary>
       <list>
         <item itemvalue="Python.app" />
+        <item itemvalue="Python.app" />
       </list>
     </recent_temporary>
   </component>
@@ -117,6 +123,8 @@
       <workItem from="1774324050980" duration="27649000" />
       <workItem from="1774455834179" duration="8474000" />
       <workItem from="1774528102311" duration="677000" />
+      <workItem from="1774941583365" duration="3609000" />
+      <workItem from="1775005921377" duration="1451000" />
     </task>
     <task id="LOCAL-00001" summary="初始化">
       <created>1773563647192</created>
@@ -370,7 +378,7 @@
     <option name="LAST_COMMIT_MESSAGE" value="```&#10;feat(workspace): 工作区服务增加目录遍历优化和性能提升- 在 workspace_service.py 中添加跳过特定目录（node_modules、.git 等）的功能&#10;- 修改文件遍历算法，使用迭代方式替代递归，提高大目录处理性能&#10;- 增加权限检查，避免因权限问题导致的遍历中断-优化文件树响应结构，提升工作区文件操作效率&#10;&#10;refactor(config): 数据库配置优化字段类型定义&#10;&#10;- 在 config/base.py 中导入 Text 类型支持长文本字段- 将 description 字段从 String(500) 修改为 Text 类型，支持更长的描述内容&#10;-保持 remark 字段为 String(500) 类型，满足不同长度需求docs(references): 添加测试相关参考文档- 创建自动化框架参考文档，包含 Screenplay 模式、关键字驱动等高级模式&#10;- 添加 E2E 测试策略文档，涵盖用户流程测试和跨浏览器测试&#10;- 新增集成测试参考，包括 API 测试和数据库测试示例&#10;- 添加性能测试文档，提供 k6 负载测试配置和阈值设置&#10;```" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/casego_backend_pg$app.coverage" NAME="app 覆盖结果" MODIFIED="1774528168170" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/casego_backend_pg$app.coverage" NAME="app 覆盖结果" MODIFIED="1775006738364" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/casego_backend_pg$python__m_pytest_auto_api2_cli.coverage" NAME="python -m pytest_auto_api2.cli 覆盖结果" MODIFIED="1774360306034" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/CaseGo/skills/pytest-auto-api2-cli-guide" />
   </component>
 </project>

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import AsyncGenerator
 from uuid import uuid4
 
-from fastapi.responses import StreamingResponse
+
 from httpcore import ReadTimeout as HttpcoreReadTimeout
 from httpx import ReadTimeout as HttpxReadTimeout
 from openai import (
@@ -39,13 +39,6 @@ RETRYABLE_EXCEPTIONS = (
 FILE_TOOLS = frozenset({
     'write_file', 'create_file', 'edit_file', 'download_files', 'delete_file',
 })
-
-SSE_HEADERS = {
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
-    "X-Accel-Buffering": "no",
-    "Content-Encoding": "identity",
-}
 
 
 # ── 小工具 ────────────────────────────────────────────────────────
@@ -340,13 +333,3 @@ async def check_interrupts(
     except Exception as _state_err:
         logger.warning(f'{log_prefix} 检查中断状态失败: {_state_err}')
 
-
-# ── StreamingResponse 工厂 ────────────────────────────────────────
-
-def make_sse_response(generator) -> StreamingResponse:
-    """用标准 SSE 头创建 StreamingResponse。"""
-    return StreamingResponse(
-        generator,
-        media_type="text/event-stream",
-        headers=SSE_HEADERS,
-    )
