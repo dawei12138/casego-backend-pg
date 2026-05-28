@@ -244,29 +244,46 @@ class _WindowsCompatShellBackend(LocalShellBackend):
 class _FilteredFilesystemBackend(FilesystemBackend):
     """FilesystemBackend that filters root-level directory listings.
 
-    SkillsMiddleware.before_agent → _list_skills → backend.ls_info("/") 扫描技能根目录
-    发现子目录，再逐个读取 SKILL.md。此子类在根目录级别过滤 ls_info 结果，
+    SkillsMiddleware.before_agent → _list_skills → backend.ls("/") 扫描技能根目录
+    发现子目录，再逐个读取 SKILL.md。此子类在根目录级别过滤 ls 结果，
     只暴露指定的技能目录，实现按需加载。
 
-    非根目录的 ls_info（如列出技能目录内部文件）不受影响。
-    als_info 继承自 BackendProtocol，默认通过 asyncio.to_thread 调用 ls_info，
-    因此只需重写 ls_info 即可同时覆盖同步和异步路径。
+    非根目录的 ls（如列出技能目录内部文件）不受影响。
     """
 
     def __init__(self, root_dir, allowed_names: set[str] | None = None, **kwargs):
         super().__init__(root_dir=root_dir, **kwargs)
         self._allowed_names = allowed_names
+        logger.info(f"_FilteredFilesystemBackend 初始化: root_dir={root_dir}, allowed_names={allowed_names}")
 
-    def ls_info(self, path: str):
-        items = super().ls_info(path)
-        # 仅在根级别过滤（SkillsMiddleware 发现技能的入口）
-        if self._allowed_names is not None and not path.strip("/"):
-            return [
+    def ls(self, path: str):
+        """重写 ls 方法以过滤根目录的技能列表"""
+        result = super().ls(path)
+
+        # 获取条目列表（兼容 LsResult 和 list 两种返回格式）
+        from deepagents.backends.protocol import LsResult
+        items = result.entries if isinstance(result, LsResult) else result
+
+        # 仅在根级别过滤
+        normalized_path = path.strip("/")
+        logger.info(f"_FilteredFilesystemBackend.ls 被调用: path={repr(path)}, normalized={repr(normalized_path)}, items_count={len(items) if items else 0}")
+
+        if self._allowed_names is not None and not normalized_path and items:
+            filtered = [
                 item for item in items
                 if not item.get("is_dir")
                 or PurePosixPath(item["path"].rstrip("/")).name in self._allowed_names
             ]
-        return items
+            logger.info(
+                f"_FilteredFilesystemBackend.ls 过滤: allowed={self._allowed_names}, "
+                f"total={len(items)}, filtered={len(filtered)}"
+            )
+            # 返回相同格式
+            if isinstance(result, LsResult):
+                return LsResult(entries=filtered)
+            return filtered
+
+        return result
 
 
 # 全局工作区根目录（与原 UserThreadFilesystemBackend 保持一致）
@@ -424,6 +441,7 @@ async def create_deep_agent_instance(
             "system_prompt": system_prompt,
             "tools": non_mcp_tools,  # 只包含非 MCP 工具
             "model": model,
+            "skills": skills_paths or [],  # 子 Agent 也遵循按需加载
         })
         logger.info(
             f"配置 general-purpose 子 Agent: 移除 {len(mcp_tools)} 个 MCP 工具，"

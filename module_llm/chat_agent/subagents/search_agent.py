@@ -105,6 +105,7 @@ def build_search_subagent(model=None) -> dict:
         ),
         "system_prompt": SEARCH_AGENT_SYSTEM_PROMPT,
         "tools": [web_search],
+        "skills": [],  # 搜索子 Agent 不需要加载技能
     }
     if model is not None:
         config["model"] = model
