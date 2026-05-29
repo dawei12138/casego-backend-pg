@@ -11,6 +11,15 @@ class WorknodesDao:
     执行器节点模块数据库操作层
     """
 
+    @staticmethod
+    def normalize_worknodes_payload(worknodes: dict) -> dict:
+        normalized = dict(worknodes)
+        if isinstance(normalized.get('parent_id'), int):
+            normalized['parent_id'] = str(normalized['parent_id'])
+        if isinstance(normalized.get('workflow_id'), str):
+            normalized['workflow_id'] = int(normalized['workflow_id'])
+        return normalized
+
     @classmethod
     async def get_worknodes_detail_by_id(cls, db: AsyncSession, node_id: int):
         """
@@ -125,12 +134,9 @@ class WorknodesDao:
         :param worknodes: 执行器节点对象
         :return:
         """
-        x = worknodes.model_dump(exclude={'del_flag', 'case_ids', 'project_id', 'curl_command', 'after_node_id'})
-        if isinstance(x.get("parent_id"), int):
-            x["parent_id"] = str(x["parent_id"])
-
-        if isinstance(x.get('workflow_id'), str):
-            x["workflow_id"] = int(x["workflow_id"])
+        x = cls.normalize_worknodes_payload(
+            worknodes.model_dump(exclude={'del_flag', 'case_ids', 'project_id', 'curl_command', 'after_node_id'})
+        )
         db_worknodes = ApiWorknodes(**x)
         db.add(db_worknodes)
         await db.flush()
@@ -147,7 +153,7 @@ class WorknodesDao:
         :param worknodes: 需要更新的执行器节点字典
         :return:
         """
-        await db.execute(update(ApiWorknodes), [worknodes])
+        await db.execute(update(ApiWorknodes), [cls.normalize_worknodes_payload(worknodes)])
 
     @classmethod
     async def delete_worknodes_dao(cls, db: AsyncSession, worknodes: WorknodesModel):

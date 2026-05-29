@@ -2505,3 +2505,4 @@ bin-release/
 /CaseGo/skills/node_modules/zod/src/v4/mini/iso.ts
 /CaseGo/skills/node_modules/zod/src/v4/mini/parse.ts
 /CaseGo/skills/node_modules/zod/src/v4/mini/schemas.ts
+/tests/api_workflow/test_worknodes_dao.py
