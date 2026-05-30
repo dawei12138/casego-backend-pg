@@ -83,6 +83,7 @@ from module_llm.workspace.controller.workspace_controller import workspaceContro
 from sub_applications.handle import handle_sub_applications
 from utils.common_util import worship
 from utils.log_util import logger
+from utils.openapi_util import enrich_openapi_schema
 
 
 @asynccontextmanager
@@ -139,7 +140,7 @@ app = FastAPI(
 )
 
 
-# 自定义 OpenAPI schema，强制使用 3.0.3 版本以兼容旧版 Swagger UI
+# 自定义 OpenAPI schema，增强测试所需信息并保持旧版 Swagger UI 兼容
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
@@ -150,14 +151,7 @@ def custom_openapi():
         description=app.description,
         routes=app.routes,
     )
-    # 将 OpenAPI 版本从 3.1.0 改为 3.0.3 以兼容旧版 Swagger UI
-    openapi_schema["openapi"] = "3.0.3"
-    # 添加 servers 配置，让 Swagger UI 请求带上 /dev-api 前缀
-    openapi_schema["servers"] = [
-        {"url": "/", "description": "本地环境"},
-        {"url": "/dev-api", "description": "测试环境"},
-
-    ]
+    openapi_schema = enrich_openapi_schema(openapi_schema)
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
@@ -263,7 +257,7 @@ async def custom_redoc_html():
     return get_redoc_html(
         openapi_url=app.openapi_url,
         title=f"{app.title} - ReDoc",
-        redoc_js_url="/static/redoc/redoc.standalone.js",
+        redoc_js_url="/static/redoc/bundles/redoc.standalone.js",
         redoc_favicon_url="/static/swagger-ui/favicon-32x32.png",
     )
 

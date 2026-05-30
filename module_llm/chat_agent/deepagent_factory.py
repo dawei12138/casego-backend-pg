@@ -366,47 +366,47 @@ async def create_deep_agent_instance(
     checkpointer = await get_checkpointer()
 
     # 配置 Backend：混合文件系统 + 共享技能 + Shell 执行
-    def make_backend(runtime):
-        # 用户/会话隔离的工作目录
-        workspace_root = os.path.join(
-            WORKSPACE_ROOT,
-            str(user_id),
-            str(thread_id)
-        )
-        os.makedirs(workspace_root, exist_ok=True)
+    # deepagents 0.6.x 已弃用 callable backend factory；这里的 backend 只依赖
+    # user_id/thread_id，不依赖 ToolRuntime，因此直接构造实例即可。
+    workspace_root = os.path.join(
+        WORKSPACE_ROOT,
+        str(user_id),
+        str(thread_id)
+    )
+    os.makedirs(workspace_root, exist_ok=True)
 
-        # 使用 LocalShellBackend 提供文件系统 + execute 工具
-        # root_dir 设置为用户隔离目录，virtual_mode=True 防止路径逃逸
-        shell_backend = _WindowsCompatShellBackend(
-            root_dir=workspace_root,
+    # 使用 LocalShellBackend 提供文件系统 + execute 工具
+    # root_dir 设置为用户隔离目录，virtual_mode=True 防止路径逃逸
+    shell_backend = _WindowsCompatShellBackend(
+        root_dir=workspace_root,
+        virtual_mode=True,
+        timeout=120,  # 命令超时 120 秒
+        max_output_bytes=100000,  # 最大输出 100KB
+        inherit_env=True,  # 继承宿主环境变量（PATH 等），使 python 等命令可用
+    )
+
+    # 共享技能目录：所有用户可读，通过 /skills/ 虚拟路径访问
+    # 按需加载时使用 _FilteredFilesystemBackend 过滤根级别 ls_info，
+    # 使 SkillsMiddleware 只发现指定的技能目录
+    os.makedirs(SKILLS_ROOT, exist_ok=True)  # 确保目录存在，避免导入后沙盒无法访问
+    if allowed_skill_names is not None:
+        skills_backend = _FilteredFilesystemBackend(
+            root_dir=SKILLS_ROOT,
             virtual_mode=True,
-            timeout=120,  # 命令超时 120 秒
-            max_output_bytes=100000,  # 最大输出 100KB
-            inherit_env=True,  # 继承宿主环境变量（PATH 等），使 python 等命令可用
+            allowed_names=allowed_skill_names,
+        )
+    else:
+        skills_backend = FilesystemBackend(
+            root_dir=SKILLS_ROOT,
+            virtual_mode=True,
         )
 
-        # 共享技能目录：所有用户可读，通过 /skills/ 虚拟路径访问
-        # 按需加载时使用 _FilteredFilesystemBackend 过滤根级别 ls_info，
-        # 使 SkillsMiddleware 只发现指定的技能目录
-        os.makedirs(SKILLS_ROOT, exist_ok=True)  # 确保目录存在，避免导入后沙盒无法访问
-        if allowed_skill_names is not None:
-            skills_backend = _FilteredFilesystemBackend(
-                root_dir=SKILLS_ROOT,
-                virtual_mode=True,
-                allowed_names=allowed_skill_names,
-            )
-        else:
-            skills_backend = FilesystemBackend(
-                root_dir=SKILLS_ROOT,
-                virtual_mode=True,
-            )
-
-        return CompositeBackend(
-            default=shell_backend,
-            routes={
-                "/skills/": skills_backend,
-            },
-        )
+    backend = CompositeBackend(
+        default=shell_backend,
+        routes={
+            "/skills/": skills_backend,
+        },
+    )
 
     # 分离 MCP 工具和非 MCP 工具
     mcp_tools = []
@@ -454,7 +454,7 @@ async def create_deep_agent_instance(
         system_prompt=system_prompt,
         tools=tools or [],  # 主 Agent 使用全部工具
         skills=skills_paths or [],
-        backend=make_backend,
+        backend=backend,
         checkpointer=checkpointer,
         subagents=subagents or None,  # 配置子 Agent（空列表时传 None 使用默认）
         name=f"agent-user{user_id}-thread{thread_id}",

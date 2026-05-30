@@ -723,8 +723,12 @@ class APIExecutor:
 
         # Binary文件上传
         if self.test_case.request_type == Request_Type.Binary:
-            # 如果有文件，就传入文件配置
-            return self.test_case.case_file_config.model_dump()
+            case_file_config = getattr(self.test_case, 'case_file_config', None)
+            if not case_file_config:
+                return None
+            if isinstance(case_file_config, dict):
+                return case_file_config
+            return case_file_config.model_dump()
 
         return None
 
