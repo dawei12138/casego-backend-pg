@@ -73,6 +73,7 @@ async def create_agent_and_model(
     provider_key: str,
     model_name: str,
     enable_thinking: bool,
+    thinking_level: str | None,
     enable_web_search: bool,
     user_id: int,
     thread_id: str,
@@ -85,6 +86,7 @@ async def create_agent_and_model(
 
     :param mcp_tools: 外部传入的 MCP 工具列表（由 mcp_tools_context 提供）。
                       若不为 None，则合并到内置工具中。
+    :param thinking_level: 思考程度(low/high/xhigh/max)，由模型工厂按接口协议转换。
     :param skill_ids: 前端传入的技能 UUID 列表。
                       传入时只加载指定技能；为 None/空 则加载全部技能。
     :return: (model, agent)
@@ -96,8 +98,12 @@ async def create_agent_and_model(
     if not provider_config.provider_id:
         raise ServiceException(message=f'提供商配置不存在: {provider_key}')
 
+    effective_thinking = enable_thinking or bool(thinking_level)
     model = create_chat_model(
-        provider_config, model_name, enable_thinking=enable_thinking,
+        provider_config,
+        model_name,
+        enable_thinking=effective_thinking,
+        thinking_level=thinking_level,
     )
 
     # 统一指定上下文长度限制，让 SummarizationMiddleware 的 ("fraction", 0.85) 触发器正常工作。
@@ -106,7 +112,7 @@ async def create_agent_and_model(
 
     logger.info(
         f'{log_prefix}创建模型: provider={provider_config.provider_key}, '
-        f'model={model_name}, enable_thinking={enable_thinking}'
+        f'model={model_name}, enable_thinking={effective_thinking}, thinking_level={thinking_level}'
     )
 
     tools = get_builtin_tools(enable_web_search=enable_web_search)

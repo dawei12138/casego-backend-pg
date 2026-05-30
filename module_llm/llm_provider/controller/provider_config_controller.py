@@ -105,7 +105,17 @@ async def delete_provider_provider_config(request: Request, provider_ids: str, q
 
 
 @provider_configController.get(
-    '/{provider_id}',
+    '/options',
+    summary='获取对话可用的LLM提供商和模型选项',
+    description='返回已启用的提供商、模型型号、接口协议和思考程度，不包含密钥等敏感字段',
+)
+async def get_provider_provider_config_options(request: Request, query_db: AsyncSession = Depends(get_db)):
+    provider_options = await Provider_configService.get_provider_config_options_services(query_db)
+    return ResponseUtil.success(data=[item.model_dump(by_alias=True) for item in provider_options])
+
+
+@provider_configController.get(
+    '/{provider_id:int}',
     response_model=Provider_configModel,
     dependencies=[Depends(CheckUserInterfaceAuth('provider:provider_config:query'))],
     summary='获取LLM提供商配置详情',

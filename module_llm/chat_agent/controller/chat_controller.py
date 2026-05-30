@@ -107,6 +107,13 @@ async def chat_completions(
         await ThreadDao.add_thread_dao(query_db, new_thread)
         await query_db.commit()
         logger.info(f'新增聊天线程: thread_id={request.thread_id}')
+    else:
+        await ThreadDao.touch_thread_dao(
+            query_db,
+            request.thread_id,
+            current_user.user.user_name,
+        )
+        await query_db.commit()
 
     # Load MCP configs
     mcp_connections = {}
@@ -145,11 +152,13 @@ async def chat_completions(
         try:
             async with AsyncSessionLocal() as run_db:
                 async with mcp_tools_context(servers=_mcp_connections) as mcp_tools:
+                    effective_thinking = _request.enable_thinking or bool(_request.thinking_level)
                     _, agent = await create_agent_and_model(
                         run_db,
                         _request.provider_key,
                         _request.model,
-                        _request.enable_thinking,
+                        effective_thinking,
+                        _request.thinking_level,
                         _request.enable_web_search,
                         _current_user.user.user_id,
                         _request.thread_id,
@@ -173,7 +182,7 @@ async def chat_completions(
                                 config,
                                 request_id=run.request_id,
                                 cancel_event=run.cancel_event,
-                                enable_thinking=_request.enable_thinking,
+                                enable_thinking=effective_thinking,
                                 user_id=_current_user.user.user_id,
                                 thread_id=_request.thread_id,
                                 log_prefix='[SSE]',
@@ -238,9 +247,9 @@ async def stop_chat(
 ):
     stopped = await _stream_manager.stop_by_thread(thread_id)
     if not stopped:
-        return ResponseUtil.failure(msg=f'会话不在运行中: {thread_id}')
+        return ResponseUtil.success(msg='会话不在运行中或已结束', data={'stopped': False})
     logger.info(f'终止会话请求: thread_id={thread_id}, user={current_user.user.user_name}')
-    return ResponseUtil.success(msg='会话终止请求已发送')
+    return ResponseUtil.success(msg='会话终止请求已发送', data={'stopped': True})
 
 
 @chatController.get('/stream/reconnect', summary='重连流式会话', description='页面刷新后，重新订阅正在运行的会话流')
@@ -277,6 +286,13 @@ async def answer_question(
         mcp_connections = build_connections_from_db_configs(db_configs)
         logger.info(f'[Answer] 加载 {len(mcp_connections)} 个MCP服务器配置: {list(mcp_connections.keys())}')
 
+    await ThreadDao.touch_thread_dao(
+        query_db,
+        request.thread_id,
+        current_user.user.user_name,
+    )
+    await query_db.commit()
+
     _request = request
     _mcp_connections = mcp_connections
     _current_user = current_user
@@ -286,11 +302,13 @@ async def answer_question(
         try:
             async with AsyncSessionLocal() as run_db:
                 async with mcp_tools_context(servers=_mcp_connections) as mcp_tools:
+                    effective_thinking = _request.enable_thinking or bool(_request.thinking_level)
                     _, agent = await create_agent_and_model(
                         run_db,
                         _request.provider_key,
                         _request.model,
-                        _request.enable_thinking,
+                        effective_thinking,
+                        _request.thinking_level,
                         _request.enable_web_search,
                         _current_user.user.user_id,
                         _request.thread_id,
@@ -305,7 +323,7 @@ async def answer_question(
                         config,
                         request_id=run.request_id,
                         cancel_event=run.cancel_event,
-                        enable_thinking=_request.enable_thinking,
+                        enable_thinking=effective_thinking,
                         user_id=_current_user.user.user_id,
                         thread_id=_request.thread_id,
                         log_prefix='[Answer SSE]',

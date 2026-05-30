@@ -5,17 +5,17 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="851b233a-776a-4093-a81e-488998e0c650" name="更改" comment="```&#10;fix(api-request):修复二进制文件上传时的配置处理逻辑&#10;&#10;- 添加对 case_file_config 属性的空值检查，避免 AttributeError&#10;- 支持字典类型的配置对象，直接返回原始数据&#10;- 保持模型对象的 model_dump() 调用兼容性&#10;&#10;refactor(chat-agent): 升级 deepagents 后端配置适配新版本&#10;&#10;- 移除已废弃的 callable backend factory 模式- 直接构造 CompositeBackend 实例替代工厂函数- 保持用户/会话隔离的工作目录和技能目录配置逻辑&#10;&#10;chore(dependencies): 更新 langchain 和 deepagents 依赖包版本&#10;&#10;- langchain 从1.2.10 升级到1.3.2&#10;- langchain-core从 1.2.11 升级到 1.4.0- langgraph从 1.0.8 升级到1.2.2&#10;- deepagents 从0.4.4 升级到0.6.6&#10;- 更新相关组件的版本兼容性refactor(server): 优化 OpenAPI schema 配置逻辑&#10;&#10;- 提取 OpenAPI schema 增强功能到独立工具函数&#10;- 移除硬编码的版本号修改，增强测试信息注入&#10;-修复 Redoc 静态资源路径指向正确构建目录&#10;```">
-      <change afterPath="$PROJECT_DIR$/CaseGo/skills/testcase-generator/SKILL.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/api_testing/test_api_request_executor.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/module_llm/chat_agent/test_deepagent_factory.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_openapi_schema.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/utils/openapi_util.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/deepagent_factory.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/deepagent_factory.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements-pg.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements-pg.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/server.py" beforeDir="false" afterPath="$PROJECT_DIR$/server.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils/api_tools/executors/api_request_exector.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/api_tools/executors/api_request_exector.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/controller/chat_controller.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/controller/chat_controller.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/controller/stream_helpers.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/controller/stream_helpers.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/entity/vo/chat_vo.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/entity/vo/chat_vo.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/chat_agent/model_factory.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_agent/model_factory.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/chat_thread/dao/thread_dao.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/chat_thread/dao/thread_dao.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/llm_provider/controller/provider_config_controller.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/llm_provider/controller/provider_config_controller.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/llm_provider/dao/provider_config_dao.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/llm_provider/dao/provider_config_dao.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/llm_provider/entity/do/provider_config_do.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/llm_provider/entity/do/provider_config_do.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/llm_provider/entity/vo/provider_config_vo.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/llm_provider/entity/vo/provider_config_vo.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/module_llm/llm_provider/service/provider_config_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/module_llm/llm_provider/service/provider_config_service.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -140,7 +140,9 @@
       <workItem from="1779934198288" duration="5096000" />
       <workItem from="1780037465759" duration="6153000" />
       <workItem from="1780064705528" duration="3168000" />
-      <workItem from="1780103361350" duration="3523000" />
+      <workItem from="1780103361350" duration="5563000" />
+      <workItem from="1780134507453" duration="3968000" />
+      <workItem from="1780157049634" duration="814000" />
     </task>
     <task id="LOCAL-00001" summary="初始化">
       <created>1773563647192</created>
@@ -373,7 +375,14 @@
       <option name="project" value="LOCAL" />
       <updated>1780038516097</updated>
     </task>
-    <option name="localTasksCounter" value="34" />
+    <task id="LOCAL-00034" summary="```&#10;fix(api-request):修复二进制文件上传时的配置处理逻辑&#10;&#10;- 添加对 case_file_config 属性的空值检查，避免 AttributeError&#10;- 支持字典类型的配置对象，直接返回原始数据&#10;- 保持模型对象的 model_dump() 调用兼容性&#10;&#10;refactor(chat-agent): 升级 deepagents 后端配置适配新版本&#10;&#10;- 移除已废弃的 callable backend factory 模式- 直接构造 CompositeBackend 实例替代工厂函数- 保持用户/会话隔离的工作目录和技能目录配置逻辑&#10;&#10;chore(dependencies): 更新 langchain 和 deepagents 依赖包版本&#10;&#10;- langchain 从1.2.10 升级到1.3.2&#10;- langchain-core从 1.2.11 升级到 1.4.0- langgraph从 1.0.8 升级到1.2.2&#10;- deepagents 从0.4.4 升级到0.6.6&#10;- 更新相关组件的版本兼容性refactor(server): 优化 OpenAPI schema 配置逻辑&#10;&#10;- 提取 OpenAPI schema 增强功能到独立工具函数&#10;- 移除硬编码的版本号修改，增强测试信息注入&#10;-修复 Redoc 静态资源路径指向正确构建目录&#10;```">
+      <created>1780125672603</created>
+      <option name="number" value="00034" />
+      <option name="presentableId" value="LOCAL-00034" />
+      <option name="project" value="LOCAL" />
+      <updated>1780125672603</updated>
+    </task>
+    <option name="localTasksCounter" value="35" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -419,7 +428,7 @@
     <option name="LAST_COMMIT_MESSAGE" value="```&#10;fix(api-request):修复二进制文件上传时的配置处理逻辑&#10;&#10;- 添加对 case_file_config 属性的空值检查，避免 AttributeError&#10;- 支持字典类型的配置对象，直接返回原始数据&#10;- 保持模型对象的 model_dump() 调用兼容性&#10;&#10;refactor(chat-agent): 升级 deepagents 后端配置适配新版本&#10;&#10;- 移除已废弃的 callable backend factory 模式- 直接构造 CompositeBackend 实例替代工厂函数- 保持用户/会话隔离的工作目录和技能目录配置逻辑&#10;&#10;chore(dependencies): 更新 langchain 和 deepagents 依赖包版本&#10;&#10;- langchain 从1.2.10 升级到1.3.2&#10;- langchain-core从 1.2.11 升级到 1.4.0- langgraph从 1.0.8 升级到1.2.2&#10;- deepagents 从0.4.4 升级到0.6.6&#10;- 更新相关组件的版本兼容性refactor(server): 优化 OpenAPI schema 配置逻辑&#10;&#10;- 提取 OpenAPI schema 增强功能到独立工具函数&#10;- 移除硬编码的版本号修改，增强测试信息注入&#10;-修复 Redoc 静态资源路径指向正确构建目录&#10;```" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/casego_backend_pg$app.coverage" NAME="app 覆盖结果" MODIFIED="1780108740063" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/casego_backend_pg$app.coverage" NAME="app 覆盖结果" MODIFIED="1780158062243" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/casego_backend_pg$python__m_pytest_auto_api2_cli.coverage" NAME="python -m pytest_auto_api2.cli 覆盖结果" MODIFIED="1774360306034" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/CaseGo/skills/pytest-auto-api2-cli-guide" />
   </component>
 </project>

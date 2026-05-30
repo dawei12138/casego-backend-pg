@@ -4,7 +4,20 @@ from config.constant import CommonConstant
 from exceptions.exception import ServiceException
 from module_admin.system.entity.vo.common_vo import CrudResponseModel
 from module_llm.llm_provider.dao.provider_config_dao import Provider_configDao
-from module_llm.llm_provider.entity.vo.provider_config_vo import DeleteProvider_configModel, Provider_configModel, Provider_configPageQueryModel
+from module_llm.llm_provider.entity.vo.provider_config_vo import (
+    DeleteProvider_configModel,
+    ProviderConfigOptionModel,
+    Provider_configModel,
+    Provider_configPageQueryModel,
+)
+from module_llm.llm_provider.provider_protocol import (
+    default_models_for_protocol,
+    generate_provider_key,
+    normalize_base_url,
+    normalize_api_protocol,
+    normalize_model_list,
+    normalize_thinking_levels,
+)
 from utils.common_util import CamelCaseUtil
 from utils.excel_util import ExcelUtil
 
@@ -13,6 +26,32 @@ class Provider_configService:
     """
     LLM提供商配置模块服务层
     """
+
+    @staticmethod
+    def _normalize_provider_config(page_object: Provider_configModel) -> Provider_configModel:
+        api_protocol = normalize_api_protocol(page_object.api_protocol, page_object.provider_key)
+        models = normalize_model_list(page_object.models)
+        if not models:
+            models = default_models_for_protocol(api_protocol)
+        thinking_levels = normalize_thinking_levels(page_object.thinking_levels, api_protocol)
+
+        if not page_object.provider_key:
+            page_object.provider_key = generate_provider_key()
+        if page_object.base_url:
+            page_object.base_url = normalize_base_url(page_object.base_url)
+        if not page_object.provider_name:
+            page_object.provider_name = api_protocol
+
+        page_object.api_protocol = api_protocol
+        page_object.models = models
+        page_object.thinking_levels = thinking_levels
+
+        if page_object.default_model and page_object.default_model not in models:
+            models.append(page_object.default_model)
+        if not page_object.default_model and models:
+            page_object.default_model = models[0]
+
+        return page_object
 
     @classmethod
     async def get_provider_config_list_services(
@@ -41,6 +80,7 @@ class Provider_configService:
         :return: 新增LLM提供商配置校验结果
         """
         try:
+            page_object = cls._normalize_provider_config(page_object)
             await Provider_configDao.add_provider_config_dao(query_db, page_object)
             await query_db.commit()
             return CrudResponseModel(is_success=True, message='新增成功')
@@ -57,6 +97,7 @@ class Provider_configService:
         :param page_object: 编辑LLM提供商配置对象
         :return: 编辑LLM提供商配置校验结果
         """
+        page_object = cls._normalize_provider_config(page_object)
         edit_provider_config = page_object.model_dump(exclude_unset=True, exclude={'create_by', 'create_time', 'del_flag'})
         provider_config_info = await cls.provider_config_detail_services(query_db, page_object.provider_id)
         if provider_config_info.provider_id:
@@ -110,6 +151,41 @@ class Provider_configService:
         return result
 
     @classmethod
+    async def get_provider_config_options_services(cls, query_db: AsyncSession) -> List[ProviderConfigOptionModel]:
+        """
+        获取对话页可用的提供商/模型选项，脱敏后返回。
+        """
+        provider_list = await Provider_configDao.get_provider_config_options(query_db)
+        options: List[ProviderConfigOptionModel] = []
+
+        for provider in provider_list:
+            if getattr(provider, 'status', None) != '1':
+                continue
+
+            provider_key = getattr(provider, 'provider_key', None) or ''
+            api_protocol = normalize_api_protocol(getattr(provider, 'api_protocol', None), provider_key)
+            models = normalize_model_list(getattr(provider, 'models', None))
+            default_model = getattr(provider, 'default_model', None)
+            if default_model and default_model not in models:
+                models.insert(0, default_model)
+            if not default_model and models:
+                default_model = models[0]
+
+            options.append(ProviderConfigOptionModel(
+                provider_id=getattr(provider, 'provider_id'),
+                provider_key=provider_key,
+                provider_name=getattr(provider, 'provider_name', None) or provider_key,
+                icon_url=getattr(provider, 'icon_url', None),
+                status=getattr(provider, 'status', '1'),
+                api_protocol=api_protocol,
+                models=models,
+                default_model=default_model,
+                thinking_levels=normalize_thinking_levels(getattr(provider, 'thinking_levels', None), api_protocol),
+            ))
+
+        return options
+
+    @classmethod
     async def provider_config_by_key_services(cls, query_db: AsyncSession, provider_key: str):
         """
         根据提供商标识获取配置信息service
@@ -140,13 +216,18 @@ class Provider_configService:
             'providerKey': '提供商标识(如openai/anthropic/google等)',
             'providerName': '提供商显示名称(如OpenAI/Anthropic/Google等)',
             'apiKey': 'API密钥(建议加密存储)',
-            'apiSecret': 'API密钥对(部分提供商需要)',
+            'apiSecret': 'API密钥对(历史字段)',
             'baseUrl': 'API基础URL(自定义或代理时使用)',
             'apiVersion': 'API版本(Azure等需要)',
             'timeout': '请求超时时间(秒)',
             'maxRetries': '最大重试次数',
             'extraHeaders': '额外请求头(JSON格式)',
-            'iconUrl': '提供商图标URL',
+            'extraParams': '额外请求参数(JSON格式)',
+            'apiProtocol': '接口协议类型',
+            'models': '模型型号列表',
+            'defaultModel': '默认模型型号',
+            'thinkingLevels': '支持的思考程度',
+            'iconUrl': '提供商图标URL(历史字段)',
             'status': '状态',
             'createBy': '创建者',
             'createTime': '创建时间',

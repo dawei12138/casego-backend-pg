@@ -1,7 +1,7 @@
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
-from typing import Optional
+from typing import Optional, List
 from module_admin.annotation.pydantic_annotation import as_query
 
 
@@ -21,6 +21,11 @@ class Provider_configModel(BaseModel):
     timeout: Optional[int] = Field(default=None, description='请求超时时间(秒)')
     max_retries: Optional[int] = Field(default=None, description='最大重试次数')
     extra_headers: Optional[dict] = Field(default=None, description='额外请求头(JSON格式)')
+    extra_params: Optional[dict] = Field(default=None, description='额外请求参数(JSON格式)')
+    api_protocol: Optional[str] = Field(default=None, description='接口协议类型(openai/claude/gemini/deepseek/openrouter/openai_compatible)')
+    models: Optional[List[str]] = Field(default=None, description='模型型号列表')
+    default_model: Optional[str] = Field(default=None, description='默认模型型号')
+    thinking_levels: Optional[List[str]] = Field(default=None, description='支持的思考程度(low/medium/high/xhigh/max)')
     icon_url: Optional[str] = Field(default=None, description='提供商图标URL')
     status: Optional[str] = Field(default=None, description='状态（0禁用 1启用）')
     create_by: Optional[str] = Field(default=None, description='创建者')
@@ -38,6 +43,23 @@ class Provider_configQueryModel(Provider_configModel):
     LLM提供商配置不分页查询模型
     """
     pass
+
+
+class ProviderConfigOptionModel(BaseModel):
+    """
+    对话页可用的提供商/模型选项，不包含密钥等敏感字段
+    """
+    model_config = ConfigDict(alias_generator=to_camel, from_attributes=True, populate_by_name=True)
+
+    provider_id: int = Field(description='提供商配置ID')
+    provider_key: str = Field(description='提供商标识')
+    provider_name: str = Field(description='提供商显示名称')
+    icon_url: Optional[str] = Field(default=None, description='提供商图标URL')
+    status: str = Field(description='状态（0禁用 1启用）')
+    api_protocol: str = Field(description='接口协议类型')
+    models: List[str] = Field(default_factory=list, description='模型型号列表')
+    default_model: Optional[str] = Field(default=None, description='默认模型型号')
+    thinking_levels: List[str] = Field(default_factory=list, description='支持的思考程度')
 
 
 @as_query

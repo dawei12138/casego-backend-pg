@@ -1,4 +1,4 @@
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from module_llm.llm_provider.entity.do.provider_config_do import LlmProvider
@@ -13,6 +13,41 @@ class Provider_configDao:
     """
 
     @classmethod
+    async def ensure_provider_config_columns(cls, db: AsyncSession):
+        """
+        兼容旧数据库：补齐模型配置字段。
+
+        当前仓库的 Alembic 目录被 .gitignore 忽略，开发环境容易出现代码已更新但
+        llm_provider 表未迁移的状态。这里用 PostgreSQL 幂等 DDL 在 provider 配置边界
+        补齐字段，避免 ORM select(LlmProvider) 因缺列直接失败。
+        """
+        statements = [
+            """
+            ALTER TABLE llm_provider
+            ADD COLUMN IF NOT EXISTS api_protocol VARCHAR(32) DEFAULT 'openai_chat'
+            """,
+            """
+            ALTER TABLE llm_provider
+            ADD COLUMN IF NOT EXISTS models JSONB DEFAULT '[]'::jsonb
+            """,
+            """
+            ALTER TABLE llm_provider
+            ADD COLUMN IF NOT EXISTS default_model VARCHAR(120)
+            """,
+            """
+            ALTER TABLE llm_provider
+            ADD COLUMN IF NOT EXISTS thinking_levels JSONB DEFAULT '[]'::jsonb
+            """,
+            """
+            ALTER TABLE llm_provider
+            ADD COLUMN IF NOT EXISTS extra_params JSONB DEFAULT '{}'::jsonb
+            """,
+        ]
+        for statement in statements:
+            await db.execute(text(statement))
+        await db.commit()
+
+    @classmethod
     async def get_provider_config_detail_by_id(cls, db: AsyncSession, provider_id: int):
         """
         根据提供商配置ID获取LLM提供商配置详细信息
@@ -21,6 +56,7 @@ class Provider_configDao:
         :param provider_id: 提供商配置ID
         :return: LLM提供商配置信息对象
         """
+        await cls.ensure_provider_config_columns(db)
         provider_config_info = (
             (
                 await db.execute(
@@ -45,6 +81,7 @@ class Provider_configDao:
         :param provider_key: 提供商标识(如openai/anthropic/deepseek等)
         :return: LLM提供商配置信息对象
         """
+        await cls.ensure_provider_config_columns(db)
         provider_config_info = (
             (
                 await db.execute(
@@ -70,6 +107,7 @@ class Provider_configDao:
         :param provider_config: LLM提供商配置参数对象
         :return: LLM提供商配置信息对象
         """
+        await cls.ensure_provider_config_columns(db)
         provider_config_info = (
             (
                 await db.execute(
@@ -93,6 +131,7 @@ class Provider_configDao:
         :param is_page: 是否开启分页
         :return: LLM提供商配置列表信息字典对象
         """
+        await cls.ensure_provider_config_columns(db)
         query = (
             select(LlmProvider)
             .where(
@@ -106,6 +145,24 @@ class Provider_configDao:
         return provider_config_list
 
     @classmethod
+    async def get_provider_config_options(cls, db: AsyncSession):
+        """
+        获取对话页可用的启用提供商配置。
+
+        仅返回 ORM 对象，由 service 层负责脱敏和归一化。
+        """
+        await cls.ensure_provider_config_columns(db)
+        result = await db.execute(
+            select(LlmProvider)
+            .where(
+                LlmProvider.del_flag == "0",
+                LlmProvider.status == "1",
+            )
+            .order_by(LlmProvider.sort_no, LlmProvider.provider_id)
+        )
+        return result.scalars().all()
+
+    @classmethod
     async def get_provider_config_orm_list(cls, db: AsyncSession, query_object: Provider_configQueryModel) -> List[Provider_configQueryModel]:
         """
         根据查询参数获取LLM提供商配置列表orm对象
@@ -114,6 +171,7 @@ class Provider_configDao:
         :param query_object: 查询参数对象
         :return: LLM提供商配置列表信息orm对象
         """
+        await cls.ensure_provider_config_columns(db)
         query = (
             select(LlmProvider)
             .where(
@@ -135,6 +193,7 @@ class Provider_configDao:
         :param provider_config: LLM提供商配置对象
         :return:
         """
+        await cls.ensure_provider_config_columns(db)
         db_provider_config = LlmProvider(**provider_config.model_dump(exclude={}))
         db.add(db_provider_config)
         await db.flush()
@@ -150,6 +209,7 @@ class Provider_configDao:
         :param provider_config: 需要更新的LLM提供商配置字典
         :return:
         """
+        await cls.ensure_provider_config_columns(db)
         await db.execute(update(LlmProvider), [provider_config])
 
     @classmethod

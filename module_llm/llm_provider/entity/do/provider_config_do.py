@@ -96,6 +96,43 @@ class LlmProvider(Base):
         comment='额外请求头(JSON格式)'
     )
 
+    # 额外请求参数(JSON格式)，用于兼容接口透传请求体参数
+    extra_params = Column(
+        JSONB, nullable=True, default=dict,
+        comment='额外请求参数(JSON格式)'
+    )
+
+    # 接口协议类型: openai/claude/gemini/deepseek/openrouter/openai_compatible
+    api_protocol = Column(
+        String(32),
+        nullable=True,
+        default='openai_compatible',
+        comment='接口协议类型(openai/claude/gemini/deepseek/openrouter/openai_compatible)'
+    )
+
+    # 可选模型型号列表
+    models = Column(
+        JSONB,
+        nullable=True,
+        default=list,
+        comment='模型型号列表(JSON数组)'
+    )
+
+    # 默认模型型号
+    default_model = Column(
+        String(120),
+        nullable=True,
+        comment='默认模型型号'
+    )
+
+    # 支持的思考程度: low/medium/high/xhigh/max
+    thinking_levels = Column(
+        JSONB,
+        nullable=True,
+        default=list,
+        comment='支持的思考程度(JSON数组)'
+    )
+
     # 图标URL
     icon_url = Column(
         String(500),

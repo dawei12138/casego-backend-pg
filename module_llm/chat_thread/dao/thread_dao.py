@@ -76,7 +76,7 @@ class ThreadDao:
                 LlmChatThread.user_id == query_object.user_id if query_object.user_id else True,
             )
             .where(LlmChatThread.del_flag == "0")
-            .order_by(desc(LlmChatThread.create_time))
+            .order_by(desc(LlmChatThread.update_time), desc(LlmChatThread.create_time))
             # .distinct()
         )
         thread_list = await PageUtil.paginate(db, query, query_object.page_num, query_object.page_size, is_page)
@@ -99,7 +99,7 @@ class ThreadDao:
                 LlmChatThread.user_id == query_object.user_id if query_object.user_id else True,
             )
             .where(LlmChatThread.del_flag == "0")
-            .order_by(desc(LlmChatThread.create_time))
+            .order_by(desc(LlmChatThread.update_time), desc(LlmChatThread.create_time))
             # .distinct()
         )
 
@@ -131,6 +131,25 @@ class ThreadDao:
         :return:
         """
         await db.execute(update(LlmChatThread), [thread])
+
+    @classmethod
+    async def touch_thread_dao(cls, db: AsyncSession, thread_id: str, update_by: str | None = None):
+        """
+        更新线程最近活跃时间。
+
+        :param db: orm对象
+        :param thread_id: 线程唯一标识符(UUID格式)
+        :param update_by: 更新者
+        :return:
+        """
+        values = {'update_time': datetime.now()}
+        if update_by:
+            values['update_by'] = update_by
+        await db.execute(
+            update(LlmChatThread)
+            .where(LlmChatThread.thread_id == thread_id)
+            .values(**values)
+        )
 
     @classmethod
     async def delete_thread_dao(cls, db: AsyncSession, thread: ThreadModel):
