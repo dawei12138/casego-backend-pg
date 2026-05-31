@@ -16,8 +16,8 @@ def test_provider_config_normalization_auto_generates_key_and_defaults(monkeypat
     from module_llm.llm_provider.service.provider_config_service import Provider_configService
 
     model = Provider_configModel(
-        providerName='OpenAI',
-        apiProtocol='openai',
+        providerName='OpenAI Responses',
+        apiProtocol='responses',
         baseUrl='https://api.openai.com/v1/responses',
         models=[],
         defaultModel=None,
@@ -27,7 +27,7 @@ def test_provider_config_normalization_auto_generates_key_and_defaults(monkeypat
     normalized = Provider_configService._normalize_provider_config(model)
 
     assert str(UUID(normalized.provider_key))
-    assert normalized.api_protocol == 'openai'
+    assert normalized.api_protocol == 'responses'
     assert normalized.base_url == 'https://api.openai.com'
     assert normalized.models[:3] == ['gpt-5', 'gpt-5-mini', 'gpt-5-nano']
     assert normalized.default_model == 'gpt-5'

@@ -50,16 +50,18 @@ from module_llm.chat_thread.entity.vo.thread_vo import ThreadModel
 from utils.log_util import logger
 from utils.response_util import ResponseUtil
 
+from deepagents.graph import DeepAgentState
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
-from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.channels.base import EmptyChannelError
+from langgraph.graph import StateGraph
+from langgraph.pregel._checkpoint import achannels_from_checkpoint
 from langgraph.types import Command
 
 chatController = APIRouter(prefix='/chat/agent')
 
 _stream_manager = StreamManager()
 
-_history_graph: Any | None = None
-_history_graph_lock: asyncio.Lock | None = None
+_history_state_channels: dict[str, Any] | None = None
 
 
 def _build_request_signature(payload: dict) -> str:
@@ -488,72 +490,55 @@ def _group_messages_to_turns(
     return turns
 
 
-def _create_minimal_graph():
-    def noop(state: MessagesState):
-        return state
-    builder = StateGraph(MessagesState)
-    builder.add_node('noop', noop)
-    builder.add_node('tools', noop)
-    builder.add_edge(START, 'noop')
-    builder.add_edge('noop', END)
-    return builder
+def _get_history_state_channels() -> dict[str, Any]:
+    global _history_state_channels
+    if _history_state_channels is None:
+        _history_state_channels = dict(StateGraph(DeepAgentState).channels)
+    return _history_state_channels
 
 
-async def _get_history_graph():
-    global _history_graph, _history_graph_lock
-    if _history_graph_lock is None:
-        _history_graph_lock = asyncio.Lock()
-    if _history_graph is not None:
-        return _history_graph
-    async with _history_graph_lock:
-        if _history_graph is None:
-            checkpointer = await get_checkpointer()
-            builder = _create_minimal_graph()
-            _history_graph = builder.compile(checkpointer=checkpointer)
-    return _history_graph
+async def _read_messages_from_checkpoint(checkpointer, config: dict) -> list:
+    saved = await checkpointer.aget_tuple(config)
+    if saved is None:
+        return []
+
+    channels, _ = await achannels_from_checkpoint(
+        _get_history_state_channels(),
+        saved.checkpoint,
+        saver=checkpointer,
+        config=saved.config,
+    )
+    try:
+        return list(channels['messages'].get() or [])
+    except EmptyChannelError:
+        return []
 
 
-async def _build_needed_timestamps(
-    graph, config: dict, target_message_ids: set[str],
+async def _build_needed_timestamps_from_checkpoints(
+    checkpointer, config: dict, target_message_ids: set[str],
 ) -> dict[str, str]:
     unresolved_ids = set(target_message_ids)
     if not unresolved_ids:
         return {}
+
     ts_map: dict[str, str] = {}
-    prev_msgs = None
-    prev_ts = None
-    async for snapshot in graph.aget_state_history(config):
-        snap_ts = snapshot.created_at
+    async for snapshot in checkpointer.alist(config):
+        snap_ts = snapshot.checkpoint.get('ts') if snapshot.checkpoint else None
         if not snap_ts:
             continue
-        snap_msgs = (snapshot.values or {}).get('messages', []) or []
-        if prev_msgs is not None and prev_ts:
-            cur_len = len(snap_msgs)
-            prev_len = len(prev_msgs)
-            if cur_len <= prev_len:
-                for msg in prev_msgs[cur_len:]:
-                    msg_id = getattr(msg, 'id', None)
-                    if msg_id and msg_id in unresolved_ids:
-                        ts_map[msg_id] = prev_ts
-                        unresolved_ids.remove(msg_id)
-            else:
-                prev_ids = {getattr(msg, 'id', None) for msg in prev_msgs if getattr(msg, 'id', None) in unresolved_ids}
-                cur_ids = {getattr(msg, 'id', None) for msg in snap_msgs if getattr(msg, 'id', None) in unresolved_ids}
-                for msg_id in prev_ids - cur_ids:
-                    ts_map[msg_id] = prev_ts
+
+        for _, channel, value in snapshot.pending_writes or []:
+            if channel != 'messages':
+                continue
+            written_messages = value if isinstance(value, list) else [value]
+            for msg in written_messages:
+                msg_id = getattr(msg, 'id', None)
+                if msg_id and msg_id in unresolved_ids:
+                    ts_map[msg_id] = str(snap_ts)
                     unresolved_ids.remove(msg_id)
-        if not unresolved_ids:
-            break
-        prev_msgs = snap_msgs
-        prev_ts = snap_ts
-    if unresolved_ids and prev_msgs and prev_ts:
-        for msg in prev_msgs:
-            msg_id = getattr(msg, 'id', None)
-            if msg_id and msg_id in unresolved_ids:
-                ts_map[msg_id] = prev_ts
-                unresolved_ids.remove(msg_id)
-                if not unresolved_ids:
-                    break
+                    if not unresolved_ids:
+                        return ts_map
+
     return ts_map
 
 
@@ -565,19 +550,15 @@ async def get_chat_history(
         current_user: CurrentUserModel = Depends(LoginService.get_current_user),
 ):
     try:
-        graph = await _get_history_graph()
+        checkpointer = await get_checkpointer()
         config = {'configurable': {'thread_id': thread_id}}
-        state = await graph.aget_state(config)
 
         empty_response = ChatHistoryResponse(
             thread_id=thread_id, total=0, page=page, page_size=page_size,
             pages=0, has_more=False, turns=[],
         )
 
-        if not state or not state.values:
-            return ResponseUtil.success(data=empty_response.model_dump(by_alias=True))
-
-        all_messages = state.values.get('messages', [])
+        all_messages = await _read_messages_from_checkpoint(checkpointer, config)
         if not all_messages:
             return ResponseUtil.success(data=empty_response.model_dump(by_alias=True))
 
@@ -598,7 +579,10 @@ async def get_chat_history(
             page_messages = all_messages[start_msg_idx:end_msg_idx]
 
             missing_ts_ids = _collect_missing_ts_message_ids(page_messages)
-            ts_map = await _build_needed_timestamps(graph, config, missing_ts_ids) if missing_ts_ids else {}
+            ts_map = (
+                await _build_needed_timestamps_from_checkpoints(checkpointer, config, missing_ts_ids)
+                if missing_ts_ids else {}
+            )
 
             page_turns = _group_messages_to_turns(page_messages, ts_map=ts_map)
             page_turns = list(reversed(page_turns))

@@ -17,9 +17,10 @@ from module_llm.llm_provider.provider_protocol import (
     API_PROTOCOL_CLAUDE,
     API_PROTOCOL_DEEPSEEK,
     API_PROTOCOL_GEMINI,
-    API_PROTOCOL_OPENAI,
+    API_PROTOCOL_OPENAI_CHAT,
     API_PROTOCOL_OPENAI_COMPATIBLE,
     API_PROTOCOL_OPENROUTER,
+    API_PROTOCOL_RESPONSES,
     normalize_api_protocol,
     normalize_thinking_level,
     sdk_base_url_for_protocol,
@@ -37,9 +38,13 @@ except ModuleNotFoundError:
     ChatGoogleGenerativeAI = None
 
 try:
+    import openai
     from langchain_openai import ChatOpenAI
+    from langchain_openai.chat_models import base as openai_chat_base
 except ModuleNotFoundError:
+    openai = None
     ChatOpenAI = None
+    openai_chat_base = None
 
 try:
     from utils.log_util import logger
@@ -133,6 +138,166 @@ class _OpenAIChatWithReasoning(_OpenAIChatBase):
         return chat_result
 
 
+def _ensure_responses_chunk_output_list(chunk) -> bool:
+    """Guard LangChain Responses streaming against completed chunks with output=None."""
+    if getattr(chunk, "type", None) not in {"response.completed", "response.incomplete"}:
+        return False
+
+    response = getattr(chunk, "response", None)
+    if response is None or getattr(response, "output", None) is not None:
+        return False
+
+    try:
+        response.output = []
+    except Exception:  # noqa: BLE001 - pydantic/openai response objects may block setattr
+        object.__setattr__(response, "output", [])
+    return True
+
+
+class _OpenAIResponsesStable(_OpenAIChatBase):
+    """OpenAI Responses wrapper that tolerates final stream chunks with output=None."""
+
+    def _stream_responses(
+        self,
+        messages,
+        stop=None,
+        run_manager=None,
+        **kwargs: Any,
+    ):
+        if openai is None or openai_chat_base is None:
+            raise RuntimeError('langchain_openai 未安装，无法创建 OpenAI Responses 模型')
+
+        kwargs["stream"] = True
+        payload = self._get_request_payload(messages, stop=stop, **kwargs)
+        try:
+            if self.include_response_headers:
+                raw_context_manager = self.root_client.with_raw_response.responses.create(**payload)
+                context_manager = raw_context_manager.parse()
+                headers = {"headers": dict(raw_context_manager.headers)}
+            else:
+                context_manager = self.root_client.responses.create(**payload)
+                headers = {}
+            original_schema_obj = kwargs.get("response_format")
+
+            with context_manager as response:
+                is_first_chunk = True
+                current_index = -1
+                current_output_index = -1
+                current_sub_index = -1
+                has_reasoning = False
+                for chunk in response:
+                    metadata = headers if is_first_chunk else {}
+                    normalized_null_output = _ensure_responses_chunk_output_list(chunk)
+                    if normalized_null_output:
+                        logger.warning('OpenAI Responses stream completed with output=None; normalized to empty output')
+                    (
+                        current_index,
+                        current_output_index,
+                        current_sub_index,
+                        generation_chunk,
+                    ) = openai_chat_base._convert_responses_chunk_to_generation_chunk(
+                        chunk,
+                        current_index,
+                        current_output_index,
+                        current_sub_index,
+                        schema=original_schema_obj,
+                        metadata=metadata,
+                        has_reasoning=has_reasoning,
+                        output_version=self.output_version,
+                    )
+                    if generation_chunk:
+                        if run_manager:
+                            run_manager.on_llm_new_token(
+                                generation_chunk.text, chunk=generation_chunk
+                            )
+                        is_first_chunk = False
+                        if "reasoning" in generation_chunk.message.additional_kwargs:
+                            has_reasoning = True
+                        yield generation_chunk
+        except openai.BadRequestError as e:
+            openai_chat_base._handle_openai_bad_request(e)
+        except openai.APIError as e:
+            openai_chat_base._handle_openai_api_error(e)
+
+    async def _astream_responses(
+        self,
+        messages,
+        stop=None,
+        run_manager=None,
+        **kwargs: Any,
+    ):
+        if openai is None or openai_chat_base is None:
+            raise RuntimeError('langchain_openai 未安装，无法创建 OpenAI Responses 模型')
+
+        kwargs["stream"] = True
+        payload = self._get_request_payload(messages, stop=stop, **kwargs)
+        try:
+            if self.include_response_headers:
+                raw_context_manager = await self.root_async_client.with_raw_response.responses.create(
+                    **payload
+                )
+                context_manager = raw_context_manager.parse()
+                headers = {"headers": dict(raw_context_manager.headers)}
+            else:
+                context_manager = await self.root_async_client.responses.create(**payload)
+                headers = {}
+            original_schema_obj = kwargs.get("response_format")
+
+            async with context_manager as response:
+                is_first_chunk = True
+                current_index = -1
+                current_output_index = -1
+                current_sub_index = -1
+                has_reasoning = False
+                async for chunk in response:
+                    metadata = headers if is_first_chunk else {}
+                    normalized_null_output = _ensure_responses_chunk_output_list(chunk)
+                    if normalized_null_output:
+                        logger.warning('OpenAI Responses stream completed with output=None; normalized to empty output')
+                    (
+                        current_index,
+                        current_output_index,
+                        current_sub_index,
+                        generation_chunk,
+                    ) = openai_chat_base._convert_responses_chunk_to_generation_chunk(
+                        chunk,
+                        current_index,
+                        current_output_index,
+                        current_sub_index,
+                        schema=original_schema_obj,
+                        metadata=metadata,
+                        has_reasoning=has_reasoning,
+                        output_version=self.output_version,
+                    )
+                    if generation_chunk:
+                        if run_manager:
+                            await run_manager.on_llm_new_token(
+                                generation_chunk.text, chunk=generation_chunk
+                            )
+                        is_first_chunk = False
+                        if "reasoning" in generation_chunk.message.additional_kwargs:
+                            has_reasoning = True
+                        yield generation_chunk
+        except openai.BadRequestError as e:
+            openai_chat_base._handle_openai_bad_request(e)
+        except openai.APIError as e:
+            openai_chat_base._handle_openai_api_error(e)
+
+    def _stream(self, *args: Any, **kwargs: Any):
+        if self._use_responses_api({**kwargs, **self.model_kwargs}):
+            yield from self._stream_responses(*args, **kwargs)
+            return
+        yield from super()._stream(*args, **kwargs)
+
+    async def _astream(self, *args: Any, **kwargs: Any):
+        if self._use_responses_api({**kwargs, **self.model_kwargs}):
+            async for chunk in self._astream_responses(*args, **kwargs):
+                yield chunk
+            return
+        async for chunk in super()._astream(*args, **kwargs):
+            yield chunk
+
+
 class _DeepSeekWithThinking(_DeepSeekBase):
     """
     ChatDeepSeek 扩展：仅解决 thinking 模式下多轮对话 reasoning_content 丢失的 400 报错。
@@ -196,11 +361,6 @@ def create_chat_model(
     )
 
 
-def _model_uses_responses_api(model_name: str) -> bool:
-    model = (model_name or '').lower()
-    return model.startswith('gpt-5') or 'thinking' in model
-
-
 def _get_extra_params(provider_config: Provider_configModel) -> dict:
     extra_params = getattr(provider_config, 'extra_params', None)
     return extra_params if isinstance(extra_params, dict) else {}
@@ -224,9 +384,70 @@ def _merge_model_kwargs(kwargs: dict, extra_params: dict) -> None:
     kwargs["model_kwargs"] = {**model_kwargs, **extra_params}
 
 
+def _merge_claude_extra_params(kwargs: dict, extra_params: dict, *, thinking_enabled: bool) -> None:
+    if not extra_params:
+        return
+
+    model_kwargs = kwargs.get("model_kwargs")
+    if not isinstance(model_kwargs, dict):
+        model_kwargs = {}
+
+    for key, value in extra_params.items():
+        if thinking_enabled and key == "thinking":
+            continue
+        if key == "output_config" and isinstance(value, dict):
+            output_config = kwargs.get("output_config")
+            if not isinstance(output_config, dict):
+                output_config = {}
+            extra_output_config = dict(value)
+            if thinking_enabled:
+                extra_output_config.pop("effort", None)
+            if extra_output_config:
+                kwargs["output_config"] = {**extra_output_config, **output_config}
+            continue
+        if thinking_enabled and key == "effort":
+            continue
+        model_kwargs[key] = value
+
+    if model_kwargs:
+        kwargs["model_kwargs"] = model_kwargs
+
+
 def _merge_top_level_kwargs(kwargs: dict, extra_params: dict) -> None:
     for key, value in extra_params.items():
         kwargs.setdefault(key, value)
+
+
+def _openai_chat_reasoning_effort(level: str | None) -> str:
+    normalized = normalize_thinking_level(level) or 'high'
+    if normalized in {'low', 'medium', 'high'}:
+        return normalized
+    return 'high'
+
+
+def _claude_uses_adaptive_thinking(model_name: str) -> bool:
+    model = (model_name or '').lower().replace('_', '-')
+    adaptive_markers = (
+        'opus-4.6',
+        'opus-4-6',
+        'opus-4.7',
+        'opus-4-7',
+        'opus-4.8',
+        'opus-4-8',
+    )
+    return any(marker in model for marker in adaptive_markers)
+
+
+def _claude_thinking_kwargs(model_name: str, level: str, budget_tokens: int) -> dict:
+    if _claude_uses_adaptive_thinking(model_name):
+        return {
+            "thinking": {"type": "adaptive", "display": "summarized"},
+            "effort": level,
+            "output_config": {"effort": level},
+        }
+    return {
+        "thinking": {"type": "enabled", "budget_tokens": budget_tokens},
+    }
 
 
 def _base_init_kwargs(
@@ -328,11 +549,14 @@ def _create_chat_model(
     if api_protocol == API_PROTOCOL_CLAUDE:
         kwargs = _base_init_kwargs(provider_config, api_protocol=api_protocol)
         if thinking_enabled:
-            kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget_tokens}
-        _merge_model_kwargs(kwargs, extra_params)
+            kwargs.pop("temperature", None)
+            kwargs.update(_claude_thinking_kwargs(model_name, normalized_level, budget_tokens))
+        _merge_claude_extra_params(kwargs, extra_params, thinking_enabled=thinking_enabled)
         logger.info(
             f'init_chat_model (claude): model={model_name}, '
-            f'thinking_level={normalized_level if thinking_enabled else None}'
+            f'thinking_level={normalized_level if thinking_enabled else None}, '
+            f'thinking={kwargs.get("thinking")}, effort={kwargs.get("effort")}, '
+            f'output_config={kwargs.get("output_config")}'
         )
         return init_chat_model(
             model=model_name,
@@ -341,17 +565,27 @@ def _create_chat_model(
         )
 
     provider = PROVIDER_KEY_MAP.get(provider_config.provider_key, "openai")
-    if api_protocol in {API_PROTOCOL_OPENAI, API_PROTOCOL_OPENAI_COMPATIBLE, API_PROTOCOL_OPENROUTER}:
+    if api_protocol in {
+        API_PROTOCOL_OPENAI_CHAT,
+        API_PROTOCOL_RESPONSES,
+        API_PROTOCOL_OPENAI_COMPATIBLE,
+        API_PROTOCOL_OPENROUTER,
+    }:
         provider = "openai"
 
     kwargs = _base_init_kwargs(provider_config, api_protocol=api_protocol)
-    use_responses_api = api_protocol == API_PROTOCOL_OPENAI and _model_uses_responses_api(model_name)
+    use_responses_api = api_protocol == API_PROTOCOL_RESPONSES
     if use_responses_api:
         kwargs["use_responses_api"] = True
         if thinking_enabled:
             kwargs["reasoning"] = {"effort": normalized_level}
         _merge_top_level_kwargs(kwargs, extra_params)
-    elif thinking_enabled:
+    elif api_protocol == API_PROTOCOL_OPENAI_CHAT:
+        kwargs["use_responses_api"] = False
+        if thinking_enabled:
+            kwargs["reasoning_effort"] = _openai_chat_reasoning_effort(normalized_level)
+        _merge_extra_body(kwargs, extra_params)
+    elif thinking_enabled and api_protocol in {API_PROTOCOL_OPENAI_COMPATIBLE, API_PROTOCOL_OPENROUTER}:
         # OpenAI 兼容 Chat Completions API：thinking 通过 extra_body 传递。
         kwargs["extra_body"] = {
             "thinking": {"type": "enabled", "budget_tokens": budget_tokens}
@@ -365,13 +599,14 @@ def _create_chat_model(
         f'api_protocol={api_protocol}, thinking_level={normalized_level if thinking_enabled else None}'
     )
     if use_responses_api:
-        return init_chat_model(
-            model=model_name,
-            model_provider=provider,
-            **kwargs,
-        )
+        if ChatOpenAI is None:
+            raise RuntimeError('langchain_openai 未安装，无法创建 OpenAI Responses 模型')
+        return _OpenAIResponsesStable(model=model_name, **kwargs)
 
-    if api_protocol in {API_PROTOCOL_OPENAI, API_PROTOCOL_OPENAI_COMPATIBLE, API_PROTOCOL_OPENROUTER} and provider == "openai":
+    if (
+        api_protocol in {API_PROTOCOL_OPENAI_CHAT, API_PROTOCOL_OPENAI_COMPATIBLE, API_PROTOCOL_OPENROUTER}
+        and provider == "openai"
+    ):
         if ChatOpenAI is None:
             raise RuntimeError('langchain_openai 未安装，无法创建 OpenAI 兼容模型')
         return _OpenAIChatWithReasoning(model=model_name, **kwargs)

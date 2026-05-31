@@ -22,7 +22,10 @@ class Provider_configModel(BaseModel):
     max_retries: Optional[int] = Field(default=None, description='最大重试次数')
     extra_headers: Optional[dict] = Field(default=None, description='额外请求头(JSON格式)')
     extra_params: Optional[dict] = Field(default=None, description='额外请求参数(JSON格式)')
-    api_protocol: Optional[str] = Field(default=None, description='接口协议类型(openai/claude/gemini/deepseek/openrouter/openai_compatible)')
+    api_protocol: Optional[str] = Field(
+        default=None,
+        description='接口协议类型(openai_chat/responses/claude/gemini/deepseek/openrouter/openai_compatible)',
+    )
     models: Optional[List[str]] = Field(default=None, description='模型型号列表')
     default_model: Optional[str] = Field(default=None, description='默认模型型号')
     thinking_levels: Optional[List[str]] = Field(default=None, description='支持的思考程度(low/medium/high/xhigh/max)')

@@ -12,19 +12,17 @@ from uuid import uuid4
 
 
 API_PROTOCOL_OPENAI = 'openai'
+API_PROTOCOL_OPENAI_CHAT = 'openai_chat'
+API_PROTOCOL_RESPONSES = 'responses'
 API_PROTOCOL_CLAUDE = 'claude'
 API_PROTOCOL_GEMINI = 'gemini'
 API_PROTOCOL_DEEPSEEK = 'deepseek'
 API_PROTOCOL_OPENROUTER = 'openrouter'
 API_PROTOCOL_OPENAI_COMPATIBLE = 'openai_compatible'
 
-# Legacy values kept for old rows and callers; normalize_api_protocol maps them
-# to the new user-facing protocol set.
-API_PROTOCOL_RESPONSES = 'responses'
-API_PROTOCOL_OPENAI_CHAT = 'openai_chat'
-
 API_PROTOCOLS = {
-    API_PROTOCOL_OPENAI,
+    API_PROTOCOL_OPENAI_CHAT,
+    API_PROTOCOL_RESPONSES,
     API_PROTOCOL_CLAUDE,
     API_PROTOCOL_GEMINI,
     API_PROTOCOL_DEEPSEEK,
@@ -42,7 +40,8 @@ THINKING_BUDGETS = {
 }
 
 PROTOCOL_DEFAULT_THINKING_LEVELS = {
-    API_PROTOCOL_OPENAI: list(THINKING_LEVELS),
+    API_PROTOCOL_OPENAI_CHAT: list(THINKING_LEVELS),
+    API_PROTOCOL_RESPONSES: list(THINKING_LEVELS),
     API_PROTOCOL_CLAUDE: list(THINKING_LEVELS),
     API_PROTOCOL_GEMINI: list(THINKING_LEVELS),
     API_PROTOCOL_DEEPSEEK: list(THINKING_LEVELS),
@@ -51,7 +50,13 @@ PROTOCOL_DEFAULT_THINKING_LEVELS = {
 }
 
 PROTOCOL_DEFAULT_MODELS = {
-    API_PROTOCOL_OPENAI: [
+    API_PROTOCOL_OPENAI_CHAT: [
+        'gpt-4.1',
+        'gpt-4.1-mini',
+        'gpt-4o',
+        'gpt-4o-mini',
+    ],
+    API_PROTOCOL_RESPONSES: [
         'gpt-5',
         'gpt-5-mini',
         'gpt-5-nano',
@@ -96,13 +101,15 @@ def normalize_api_protocol(api_protocol: str | None, provider_key: str | None = 
     key = (provider_key or '').strip().lower()
 
     aliases = {
-        'openai': API_PROTOCOL_OPENAI,
-        '/responses': API_PROTOCOL_OPENAI,
-        'openai_responses': API_PROTOCOL_OPENAI,
-        'response': API_PROTOCOL_OPENAI,
-        'responses': API_PROTOCOL_OPENAI,
-        'chat': API_PROTOCOL_OPENAI_COMPATIBLE,
-        'chat_completions': API_PROTOCOL_OPENAI_COMPATIBLE,
+        'openai': API_PROTOCOL_OPENAI_CHAT,
+        'openai_chat': API_PROTOCOL_OPENAI_CHAT,
+        'chat': API_PROTOCOL_OPENAI_CHAT,
+        'chat_completions': API_PROTOCOL_OPENAI_CHAT,
+        '/chat/completions': API_PROTOCOL_OPENAI_CHAT,
+        'openai_responses': API_PROTOCOL_RESPONSES,
+        'response': API_PROTOCOL_RESPONSES,
+        'responses': API_PROTOCOL_RESPONSES,
+        '/responses': API_PROTOCOL_RESPONSES,
         'compatible': API_PROTOCOL_OPENAI_COMPATIBLE,
         'custom': API_PROTOCOL_OPENAI_COMPATIBLE,
         'openai_compatible': API_PROTOCOL_OPENAI_COMPATIBLE,
@@ -115,7 +122,7 @@ def normalize_api_protocol(api_protocol: str | None, provider_key: str | None = 
         'openrouter': API_PROTOCOL_OPENROUTER,
     }
     if raw == API_PROTOCOL_OPENAI_CHAT:
-        return API_PROTOCOL_OPENAI if key == 'openai' else API_PROTOCOL_OPENAI_COMPATIBLE
+        return API_PROTOCOL_OPENAI_CHAT
     if raw in aliases:
         return aliases[raw]
 
@@ -128,7 +135,7 @@ def normalize_api_protocol(api_protocol: str | None, provider_key: str | None = 
     if key == API_PROTOCOL_OPENROUTER:
         return API_PROTOCOL_OPENROUTER
     if key == 'openai':
-        return API_PROTOCOL_OPENAI
+        return API_PROTOCOL_OPENAI_CHAT
     return API_PROTOCOL_OPENAI_COMPATIBLE
 
 
@@ -159,7 +166,12 @@ def normalize_model_list(models: list | str | None) -> list[str]:
 
 def default_models_for_protocol(api_protocol: str | None) -> list[str]:
     normalized_protocol = normalize_api_protocol(api_protocol)
-    return list(PROTOCOL_DEFAULT_MODELS.get(normalized_protocol, PROTOCOL_DEFAULT_MODELS[API_PROTOCOL_OPENAI_COMPATIBLE]))
+    return list(
+        PROTOCOL_DEFAULT_MODELS.get(
+            normalized_protocol,
+            PROTOCOL_DEFAULT_MODELS[API_PROTOCOL_OPENAI_COMPATIBLE],
+        )
+    )
 
 
 def normalize_base_url(base_url: str | None) -> str | None:
@@ -178,6 +190,8 @@ def normalize_base_url(base_url: str | None) -> str | None:
         '/chat/completions',
         '/v1/responses',
         '/responses',
+        '/v1/messages',
+        '/messages',
     )
     for suffix in endpoint_suffixes:
         if lower_path.endswith(suffix):
@@ -198,7 +212,12 @@ def sdk_base_url_for_protocol(base_url: str | None, api_protocol: str | None) ->
         return None
 
     protocol = normalize_api_protocol(api_protocol)
-    if protocol not in {API_PROTOCOL_OPENAI, API_PROTOCOL_OPENAI_COMPATIBLE, API_PROTOCOL_OPENROUTER}:
+    if protocol not in {
+        API_PROTOCOL_OPENAI_CHAT,
+        API_PROTOCOL_RESPONSES,
+        API_PROTOCOL_OPENAI_COMPATIBLE,
+        API_PROTOCOL_OPENROUTER,
+    }:
         return normalized_base
 
     parsed = urlsplit(normalized_base)

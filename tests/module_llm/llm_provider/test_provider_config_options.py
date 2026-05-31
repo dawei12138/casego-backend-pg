@@ -46,13 +46,40 @@ def test_provider_options_return_enabled_model_metadata_without_secrets(monkeypa
     option = result[0].model_dump(by_alias=True)
     assert option['providerKey'] == 'openai'
     assert option['status'] == '1'
-    assert option['apiProtocol'] == 'openai'
+    assert option['apiProtocol'] == 'responses'
     assert option['models'] == ['gpt-5.4', 'gpt-5.4-high']
     assert option['defaultModel'] == 'gpt-5.4'
     assert option['thinkingLevels'] == ['low', 'high', 'xhigh']
     assert 'apiKey' not in option
     assert 'apiSecret' not in option
     assert 'extraParams' not in option
+
+
+def test_provider_options_default_openai_chat_thinking_levels(monkeypatch):
+    monkeypatch.setattr(sys, 'argv', [sys.argv[0]])
+    db_module = types.ModuleType('config.get_db')
+    db_module.get_db = lambda: None
+    monkeypatch.setitem(sys.modules, 'config.get_db', db_module)
+    from module_llm.llm_provider.dao import provider_config_dao
+    from module_llm.llm_provider.service.provider_config_service import Provider_configService
+
+    async def fake_options(_db):
+        return [
+            _provider(
+                api_protocol='openai_chat',
+                thinking_levels=None,
+                models=['gpt-4.1'],
+                default_model='gpt-4.1',
+            ),
+        ]
+
+    monkeypatch.setattr(provider_config_dao.Provider_configDao, 'get_provider_config_options', fake_options)
+
+    result = asyncio.run(Provider_configService.get_provider_config_options_services(object()))
+
+    option = result[0].model_dump(by_alias=True)
+    assert option['apiProtocol'] == 'openai_chat'
+    assert option['thinkingLevels'] == ['low', 'medium', 'high', 'xhigh', 'max']
 
 
 def test_provider_dao_ensures_model_metadata_columns(monkeypatch):
