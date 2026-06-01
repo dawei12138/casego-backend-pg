@@ -7,7 +7,18 @@
       {% set AttrName = column.python_field[0] | upper + column.python_field[1:] %}
       {% set parentheseIndex = column.column_comment.find("（") %}
       {% set comment = column.column_comment[:parentheseIndex] if parentheseIndex != -1 else column.column_comment %}
-      {% if column.html_type == "input" %}
+      {% if column | is_enum_column %}
+      <el-form-item label="{{ comment }}" prop="{{ column.python_field }}">
+        <el-select v-model="queryParams.{{ column.python_field }}" placeholder="请选择{{ comment }}" clearable style="width: 240px">
+          <el-option
+            v-for="option in {{ column | get_enum_options_name }}"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
+          />
+        </el-select>
+      </el-form-item>
+      {% elif column.html_type == "input" %}
       <el-form-item label="{{ comment }}" prop="{{ column.python_field }}">
         <el-input
           v-model="queryParams.{{ column.python_field }}"
@@ -16,6 +27,22 @@
           style="width: 240px"
           @keyup.enter="handleQuery"
         />
+      </el-form-item>
+      {% elif column.html_type == "number" %}
+      <el-form-item label="{{ comment }}" prop="{{ column.python_field }}">
+        <el-input-number
+          v-model="queryParams.{{ column.python_field }}"
+          placeholder="请输入{{ comment }}"
+          :controls="false"
+          style="width: 240px"
+        />
+      </el-form-item>
+      {% elif column.html_type == "switch" %}
+      <el-form-item label="{{ comment }}" prop="{{ column.python_field }}">
+        <el-select v-model="queryParams.{{ column.python_field }}" placeholder="请选择{{ comment }}" clearable style="width: 240px">
+          <el-option label="是" :value="true" />
+          <el-option label="否" :value="false" />
+        </el-select>
       </el-form-item>
       {% elif (column.html_type == "select" or column.html_type == "radio") and dictType %}
       <el-form-item label="{{ comment }}" prop="{{ column.python_field }}">
@@ -34,7 +61,7 @@
           <el-option label="请选择字典生成" value="" />
         </el-select>
       </el-form-item>
-      {% elif column.html_type == "datetime" and column.query_type != "BETWEEN" %}
+      {% elif column.html_type == "date" and column.query_type != "BETWEEN" %}
       <el-form-item label="{{ comment }}" prop="{{ column.python_field }}">
         <el-date-picker
           v-model="queryParams.{{ column.python_field }}"
@@ -45,15 +72,66 @@
           style="width: 240px"
         />
       </el-form-item>
-      {% elif column.html_type == "datetime" and column.query_type == "BETWEEN" %}
+      {% elif column.html_type == "time" and column.query_type != "BETWEEN" %}
+      <el-form-item label="{{ comment }}" prop="{{ column.python_field }}">
+        <el-time-picker
+          v-model="queryParams.{{ column.python_field }}"
+          value-format="HH:mm:ss"
+          placeholder="请选择{{ comment }}"
+          clearable
+          style="width: 240px"
+        />
+      </el-form-item>
+      {% elif column.html_type == "timeTz" and column.query_type != "BETWEEN" %}
+      <el-form-item label="{{ comment }}" prop="{{ column.python_field }}">
+        <el-time-picker
+          v-model="queryParams.{{ column.python_field }}"
+          value-format="HH:mm:ssZ"
+          placeholder="请选择{{ comment }}"
+          clearable
+          style="width: 240px"
+        />
+      </el-form-item>
+      {% elif (column.html_type == "datetime" or column.html_type == "datetimeTz") and column.query_type != "BETWEEN" %}
+      <el-form-item label="{{ comment }}" prop="{{ column.python_field }}">
+        <el-date-picker
+          v-model="queryParams.{{ column.python_field }}"
+          type="datetime"
+          value-format="{% if column.html_type == "datetimeTz" %}YYYY-MM-DDTHH:mm:ssZ{% else %}YYYY-MM-DD HH:mm:ss{% endif %}"
+          placeholder="请选择{{ comment }}"
+          clearable
+          style="width: 240px"
+        />
+      </el-form-item>
+      {% elif column.html_type == "duration" %}
+      <el-form-item label="{{ comment }}" prop="{{ column.python_field }}">
+        <el-input
+          v-model="queryParams.{{ column.python_field }}"
+          placeholder="例如 1 day 02:03:04"
+          clearable
+          style="width: 240px"
+          @keyup.enter="handleQuery"
+        />
+      </el-form-item>
+      {% elif column.html_type == "json" or column.html_type == "array" or column.html_type == "range" or column.html_type == "binary" or column.html_type == "textarea" %}
+      <el-form-item label="{{ comment }}" prop="{{ column.python_field }}">
+        <el-input
+          v-model="queryParams.{{ column.python_field }}"
+          type="textarea"
+          placeholder="请输入{{ comment }}"
+          :autosize="{ minRows: 2, maxRows: 4 }"
+          style="width: 240px"
+        />
+      </el-form-item>
+      {% elif (column.html_type == "date" or column.html_type == "datetime" or column.html_type == "datetimeTz") and column.query_type == "BETWEEN" %}
       <el-form-item label="{{ comment }}" style="width: 308px">
         <el-date-picker
           v-model="daterange{{ AttrName }}"
-          value-format="YYYY-MM-DD"
-          type="daterange"
+          value-format="{% if column.html_type == "date" %}YYYY-MM-DD{% elif column.html_type == "datetimeTz" %}YYYY-MM-DDTHH:mm:ssZ{% else %}YYYY-MM-DD HH:mm:ss{% endif %}"
+          type="{% if column.html_type == "date" %}daterange{% else %}datetimerange{% endif %}"
           range-separator="-"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
+          start-placeholder="开始"
+          end-placeholder="结束"
           style="width: 240px"
         />
       </el-form-item>
@@ -116,16 +194,36 @@
       {% set comment = column.column_comment[:parentheseIndex] if parentheseIndex != -1 else column.column_comment %}
       {% if column.pk %}
       <el-table-column label="{{ comment }}" align="center" prop="{{ pythonField }}" />
-      {% elif column.list and column.html_type == "datetime" %}
+      {% elif column.list and column.html_type == "switch" %}
+      <el-table-column label="{{ comment }}" align="center" prop="{{ pythonField }}" width="100">
+        <template #default="scope">
+          <el-tag :type="isTruthyBoolean(scope.row.{{ pythonField }}) ? 'success' : 'info'">
+            {% raw %}{{{% endraw %} formatBooleanValue(scope.row.{{ pythonField }}) {% raw %}}}{% endraw %}
+          </el-tag>
+        </template>
+      </el-table-column>
+      {% elif column.list and column.html_type == "date" %}
       <el-table-column label="{{ comment }}" align="center" prop="{{ pythonField }}" width="180">
         <template #default="scope">
           <span>{% raw %}{{{% endraw %} parseTime(scope.row.{{ pythonField }}, '{y}-{m}-{d}') {% raw %}}}{% endraw %}</span>
+        </template>
+      </el-table-column>
+      {% elif column.list and (column.html_type == "datetime" or column.html_type == "datetimeTz") %}
+      <el-table-column label="{{ comment }}" align="center" prop="{{ pythonField }}" width="180">
+        <template #default="scope">
+          <span>{% raw %}{{{% endraw %} parseTime(scope.row.{{ pythonField }}, '{y}-{m}-{d} {h}:{i}:{s}') {% raw %}}}{% endraw %}</span>
         </template>
       </el-table-column>
       {% elif column.list and column.html_type == "imageUpload" %}
       <el-table-column label="{{ comment }}" align="center" prop="{{ pythonField }}" width="100">
         <template #default="scope">
           <image-preview :src="scope.row.{{ pythonField }}" :width="50" :height="50"/>
+        </template>
+      </el-table-column>
+      {% elif column.list and (column | is_enum_column) %}
+      <el-table-column label="{{ comment }}" align="center" prop="{{ pythonField }}">
+        <template #default="scope">
+          <dict-tag :options="{{ column | get_enum_options_name }}" :value="scope.row.{{ pythonField }}"/>
         </template>
       </el-table-column>
       {% elif column.list and column.dict_type %}
@@ -136,6 +234,12 @@
           {% else %}
             <dict-tag :options="{{ column.dict_type }}" :value="scope.row.{{ pythonField }}"/>
           {% endif %}
+        </template>
+      </el-table-column>
+      {% elif column.list and (column.html_type == "json" or column.html_type == "array" or column.html_type == "range" or column.html_type == "binary") %}
+      <el-table-column label="{{ comment }}" align="center" prop="{{ pythonField }}" min-width="180" show-overflow-tooltip>
+        <template #default="scope">
+          <span>{% raw %}{{{% endraw %} formatTableValue(scope.row.{{ pythonField }}) {% raw %}}}{% endraw %}</span>
         </template>
       </el-table-column>
       {% elif column.list and pythonField %}
@@ -168,9 +272,35 @@
       {% set parentheseIndex = column.column_comment.find("（") %}
       {% set comment = column.column_comment[:parentheseIndex] if parentheseIndex != -1 else column.column_comment %}
       {% set dictType = column.dict_type %}
-      {% if column.html_type == "input" %}
+      {% if column | is_enum_column %}
+      <el-form-item v-if="renderField({{ column.insert | lower }}, {{ column.edit | lower }})" label="{{ comment }}" prop="{{ field }}">
+        <el-select v-model="form.{{ field }}" placeholder="请选择{{ comment }}">
+          <el-option
+            v-for="option in {{ column | get_enum_options_name }}"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
+          ></el-option>
+        </el-select>
+      </el-form-item>
+      {% elif column.html_type == "input" %}
       <el-form-item v-if="renderField({{ column.insert | lower }}, {{ column.edit | lower }})" label="{{ comment }}" prop="{{ field }}">
         <el-input v-model="form.{{ field }}" placeholder="请输入{{ comment }}" />
+      </el-form-item>
+      {% elif column.html_type == "number" %}
+      {% set numberScale = column.column_type.split(',')[1].split(')')[0] if column.column_type and ',' in column.column_type else None %}
+      <el-form-item v-if="renderField({{ column.insert | lower }}, {{ column.edit | lower }})" label="{{ comment }}" prop="{{ field }}">
+        <el-input-number
+          v-model="form.{{ field }}"
+          placeholder="请输入{{ comment }}"
+          :controls="false"
+          {% if numberScale %}:precision="{{ numberScale }}"{% endif %}
+          style="width: 100%"
+        />
+      </el-form-item>
+      {% elif column.html_type == "switch" %}
+      <el-form-item v-if="renderField({{ column.insert | lower }}, {{ column.edit | lower }})" label="{{ comment }}" prop="{{ field }}">
+        <el-switch v-model="form.{{ field }}" />
       </el-form-item>
       {% elif column.html_type == "imageUpload" %}
       <el-form-item v-if="renderField({{ column.insert | lower }}, {{ column.edit | lower }})" label="{{ comment }}" prop="{{ field }}">
@@ -243,7 +373,7 @@
           <el-radio label="请选择字典生成" value="" />
         </el-radio-group>
       </el-form-item>
-      {% elif column.html_type == "datetime" %}
+      {% elif column.html_type == "date" %}
       <el-form-item v-if="renderField({{ column.insert | lower }}, {{ column.edit | lower }})" label="{{ comment }}" prop="{{ field }}">
         <el-date-picker clearable
           v-model="form.{{ field }}"
@@ -252,9 +382,38 @@
           placeholder="请选择{{ comment }}">
         </el-date-picker>
       </el-form-item>
-      {% elif column.html_type == "textarea" %}
+      {% elif column.html_type == "time" %}
       <el-form-item v-if="renderField({{ column.insert | lower }}, {{ column.edit | lower }})" label="{{ comment }}" prop="{{ field }}">
-        <el-input v-model="form.{{ field }}" type="textarea" placeholder="请输入内容" />
+        <el-time-picker clearable
+          v-model="form.{{ field }}"
+          value-format="HH:mm:ss"
+          placeholder="请选择{{ comment }}">
+        </el-time-picker>
+      </el-form-item>
+      {% elif column.html_type == "timeTz" %}
+      <el-form-item v-if="renderField({{ column.insert | lower }}, {{ column.edit | lower }})" label="{{ comment }}" prop="{{ field }}">
+        <el-time-picker clearable
+          v-model="form.{{ field }}"
+          value-format="HH:mm:ssZ"
+          placeholder="请选择{{ comment }}">
+        </el-time-picker>
+      </el-form-item>
+      {% elif column.html_type == "datetime" or column.html_type == "datetimeTz" %}
+      <el-form-item v-if="renderField({{ column.insert | lower }}, {{ column.edit | lower }})" label="{{ comment }}" prop="{{ field }}">
+        <el-date-picker clearable
+          v-model="form.{{ field }}"
+          type="datetime"
+          value-format="{% if column.html_type == "datetimeTz" %}YYYY-MM-DDTHH:mm:ssZ{% else %}YYYY-MM-DD HH:mm:ss{% endif %}"
+          placeholder="请选择{{ comment }}">
+        </el-date-picker>
+      </el-form-item>
+      {% elif column.html_type == "duration" %}
+      <el-form-item v-if="renderField({{ column.insert | lower }}, {{ column.edit | lower }})" label="{{ comment }}" prop="{{ field }}">
+        <el-input v-model="form.{{ field }}" placeholder="例如 1 day 02:03:04" />
+      </el-form-item>
+      {% elif column.html_type == "textarea" or column.html_type == "json" or column.html_type == "array" or column.html_type == "range" or column.html_type == "binary" %}
+      <el-form-item v-if="renderField({{ column.insert | lower }}, {{ column.edit | lower }})" label="{{ comment }}" prop="{{ field }}">
+        <el-input v-model="form.{{ field }}" type="textarea" placeholder="请输入{{ comment }}" :autosize="{ minRows: 3, maxRows: 8 }" />
       </el-form-item>
       {% endif %}
       {% endif %}
@@ -296,6 +455,19 @@
             </el-date-picker>
           </template>
         </el-table-column>
+        {% elif column.list and (column | is_enum_column) %}
+        <el-table-column label="{{ comment }}" prop="{{ pythonField }}" width="150">
+          <template #default="scope">
+            <el-select v-model="scope.row.{{ pythonField }}" placeholder="请选择{{ comment }}">
+              <el-option
+                v-for="option in {{ column | get_enum_options_name }}"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              ></el-option>
+            </el-select>
+          </template>
+        </el-table-column>
         {% elif column.list and (column.html_type == 'select' or column.html_type == 'radio') and column.dict_type %}
         <el-table-column label="{{ comment }}" prop="{{ pythonField }}" width="150">
           <template #default="scope">
@@ -334,6 +506,9 @@
 
 <script setup name="{{ BusinessName }}">
 import { list{{ BusinessName }}, get{{ BusinessName }}, del{{ BusinessName }}, add{{ BusinessName }}, update{{ BusinessName }} } from "@/api/{{ moduleName }}/{{ businessName }}";
+{% if enumFields %}
+import { {% for enum_field in enumFields %}{{ enum_field.enum_options_name }}{% if not loop.last %}, {% endif %}{% endfor %} } from "@/api/{{ moduleName }}/{{ businessName }}_enum";
+{% endif %}
 
 const { proxy } = getCurrentInstance();
 {% if dicts %}
@@ -356,8 +531,10 @@ const single = ref(true);
 const multiple = ref(true);
 const total = ref(0);
 const title = ref("");
+const jsonFields = [{% for field in frontendJsonFields %}'{{ field }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+const binaryFields = [{% for field in frontendBinaryFields %}'{{ field }}'{% if not loop.last %}, {% endif %}{% endfor %}];
 {% for column in columns %}
-{% if column.html_type == "datetime" and column.query_type == "BETWEEN" %}
+{% if (column.html_type == "date" or column.html_type == "datetime" or column.html_type == "datetimeTz") and column.query_type == "BETWEEN" %}
 {% set AttrName = column.python_field[0] | upper + column.python_field[1:] %}
 const daterange{{ AttrName }} = ref([]);
 {% endif %}
@@ -380,7 +557,7 @@ const data = reactive({
     {% set parentheseIndex = column.column_comment.find("（") %}
     {% set comment = column.column_comment[:parentheseIndex] if parentheseIndex != -1 else column.column_comment %}
     {{ column.python_field }}: [
-      { required: true, message: "{{ comment }}不能为空", trigger: "{% if column.html_type == 'select' or column.html_type == 'radio' %}change{% else %}blur{% endif %}" }
+      { required: true, message: "{{ comment }}不能为空", trigger: "{% if column.html_type in ['select', 'radio', 'checkbox', 'switch', 'date', 'time', 'timeTz', 'datetime', 'datetimeTz'] %}change{% else %}blur{% endif %}" }
     ],
     {% endif %}
     {% endfor %}
@@ -393,12 +570,12 @@ const { queryParams, form, rules } = toRefs(data);
 function getList() {
   loading.value = true;
   {% for column in columns %}
-  {% if column.html_type == "datetime" and column.query_type == "BETWEEN" %}
+  {% if (column.html_type == "date" or column.html_type == "datetime" or column.html_type == "datetimeTz") and column.query_type == "BETWEEN" %}
   queryParams.value.params = {};
   {% endif %}
   {% endfor %}
   {% for column in columns %}
-  {% if column.html_type == "datetime" and column.query_type == "BETWEEN" %}
+  {% if (column.html_type == "date" or column.html_type == "datetime" or column.html_type == "datetimeTz") and column.query_type == "BETWEEN" %}
   {% set AttrName = column.python_field[0] | upper + column.python_field[1:] %}
   if (null != daterange{{ AttrName }} && '' != daterange{{ AttrName }}) {
     queryParams.value.begin{{ AttrName }} = daterange{{ AttrName }}.value[0];
@@ -445,7 +622,7 @@ function handleQuery() {
 /** 重置按钮操作 */
 function resetQuery() {
   {% for column in columns %}
-  {% if column.html_type == "datetime" and column.query_type == "BETWEEN" %}
+  {% if (column.html_type == "date" or column.html_type == "datetime" or column.html_type == "datetimeTz") and column.query_type == "BETWEEN" %}
   {% set AttrName = column.python_field[0] | upper + column.python_field[1:] %}
   daterange{{ AttrName }}.value = [];
   {% endif %}
@@ -461,6 +638,68 @@ function handleSelectionChange(selection) {
   multiple.value = !selection.length;
 }
 
+function formatTableValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+function formatBooleanValue(value) {
+  if (isTruthyBoolean(value)) {
+    return "是";
+  }
+  if (value === false || value === 0 || value === "0" || value === "false") {
+    return "否";
+  }
+  return "";
+}
+
+function isTruthyBoolean(value) {
+  return value === true || value === 1 || value === "1" || value === "true";
+}
+
+function stringifyGeneratedFields(row) {
+  const data = { ...(row || {}) };
+  jsonFields.forEach(field => {
+    if (data[field] !== null && data[field] !== undefined && typeof data[field] !== "string") {
+      data[field] = JSON.stringify(data[field], null, 2);
+    }
+  });
+  binaryFields.forEach(field => {
+    if (Array.isArray(data[field])) {
+      data[field] = data[field].join(",");
+    }
+  });
+  return data;
+}
+
+function normalizeGeneratedPayload(source) {
+  const payload = { ...(source || {}) };
+  jsonFields.forEach(field => {
+    if (payload[field] === "" || payload[field] === null || payload[field] === undefined) {
+      payload[field] = null;
+      return;
+    }
+    if (typeof payload[field] === "string") {
+      try {
+        payload[field] = JSON.parse(payload[field]);
+      } catch (error) {
+        throw new Error(`${field} 不是合法JSON`);
+      }
+    }
+  });
+  binaryFields.forEach(field => {
+    if (payload[field] === "") {
+      payload[field] = null;
+    }
+  });
+  return payload;
+}
+
 /** 新增按钮操作 */
 function handleAdd() {
   reset();
@@ -473,10 +712,10 @@ function handleUpdate(row) {
   reset();
   const _{{ pkColumn.python_field }} = row.{{ pkColumn.python_field }} || ids.value;
   get{{ BusinessName }}(_{{ pkColumn.python_field }}).then(response => {
-    form.value = response.data;
+    form.value = stringifyGeneratedFields(response.data);
     {% for column in columns %}
     {% if column.html_type == "checkbox" %}
-    form.value.{{ column.python_field }} = form.value.{{ column.python_field }}.split(",");
+    form.value.{{ column.python_field }} = form.value.{{ column.python_field }} ? form.value.{{ column.python_field }}.split(",") : [];
     {% endif %}
     {% endfor %}
     {% if table.sub %}
@@ -491,22 +730,29 @@ function handleUpdate(row) {
 function submitForm() {
   proxy.$refs["{{ businessName }}Ref"].validate(valid => {
     if (valid) {
+      let payload;
+      try {
+        payload = normalizeGeneratedPayload(form.value);
+      } catch (error) {
+        proxy.$modal.msgError(error.message);
+        return;
+      }
       {% for column in columns %}
       {% if column.html_type == "checkbox" %}
-      form.value.{{ column.python_field }} = form.value.{{ column.python_field }}.join(",");
+      payload.{{ column.python_field }} = Array.isArray(payload.{{ column.python_field }}) ? payload.{{ column.python_field }}.join(",") : payload.{{ column.python_field }};
       {% endif %}
       {% endfor %}
       {% if table.sub %}
-      form.value.{{ subclassName }}List = {{ subclassName }}List.value;
+      payload.{{ subclassName }}List = {{ subclassName }}List.value;
       {% endif %}
-      if (form.value.{{ pkColumn.python_field }} != null) {
-        update{{ BusinessName }}(form.value).then(response => {
+      if (payload.{{ pkColumn.python_field }} != null) {
+        update{{ BusinessName }}(payload).then(response => {
           proxy.$modal.msgSuccess("修改成功");
           open.value = false;
           getList();
         });
       } else {
-        add{{ BusinessName }}(form.value).then(response => {
+        add{{ BusinessName }}(payload).then(response => {
           proxy.$modal.msgSuccess("新增成功");
           open.value = false;
           getList();

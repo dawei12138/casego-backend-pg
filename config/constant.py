@@ -215,9 +215,11 @@ class GenConstant:
         [
             'date',
             'time',
+            'timetz',
             'time with time zone',
             'time without time zone',
             'timestamp',
+            'timestamptz',
             'timestamp with time zone',
             'timestamp without time zone',
             'interval',
@@ -242,15 +244,25 @@ class GenConstant:
     COLUMNTYPE_NUMBER = [
         'tinyint',
         'smallint',
+        'int2',
         'mediumint',
         'int',
+        'int4',
         'number',
         'integer',
         'bit',
+        'bit varying',
         'bigint',
+        'int8',
+        'real',
         'float',
+        'float4',
+        'float8',
         'double',
+        'double precision',
         'decimal',
+        'numeric',
+        'money',
     ]
     COLUMNNAME_NOT_ADD_SHOW = ['create_by', 'create_time']
     COLUMNNAME_NOT_EDIT_SHOW = ['update_by', 'update_time']
@@ -260,16 +272,27 @@ class GenConstant:
     BASE_ENTITY = ['createBy', 'createTime', 'updateBy', 'updateTime', 'remark']
     TREE_ENTITY = ['parentName', 'parentId', 'orderNum', 'ancestors', 'children']
     HTML_INPUT = 'input'
+    HTML_NUMBER = 'number'
     HTML_TEXTAREA = 'textarea'
     HTML_SELECT = 'select'
     HTML_RADIO = 'radio'
     HTML_CHECKBOX = 'checkbox'
+    HTML_SWITCH = 'switch'
+    HTML_DATE = 'date'
+    HTML_TIME = 'time'
+    HTML_TIME_TZ = 'timeTz'
     HTML_DATETIME = 'datetime'
+    HTML_DATETIME_TZ = 'datetimeTz'
+    HTML_DURATION = 'duration'
+    HTML_JSON = 'json'
+    HTML_ARRAY = 'array'
+    HTML_RANGE = 'range'
+    HTML_BINARY = 'binary'
     HTML_IMAGE_UPLOAD = 'imageUpload'
     HTML_FILE_UPLOAD = 'fileUpload'
     HTML_EDITOR = 'editor'
     TYPE_DECIMAL = 'Decimal'
-    TYPE_DATE = ['date', 'time', 'datetime']
+    TYPE_DATE = ['date', 'time', 'datetime', 'timedelta']
     QUERY_LIKE = 'LIKE'
     QUERY_EQ = 'EQ'
     REQUIRE = '1'
@@ -307,8 +330,8 @@ class GenConstant:
             'path': 'Geometry',
             'polygon': 'Geometry',
             'circle': 'Geometry',
-            'bit': 'Bit',
-            'bit varying': 'Bit',
+            'bit': 'BIT',
+            'bit varying': 'BIT',
             'tsvector': 'TSVECTOR',
             'tsquery': 'TSQUERY',
             'xml': 'String',
@@ -316,18 +339,55 @@ class GenConstant:
             'composite': 'JSON',
             'enum': 'Enum',
             'range': 'Range',
-            'money': 'Numeric',
+            'money': 'MONEY',
             'pg_lsn': 'BigInteger',
             'txid_snapshot': 'String',
-            'oid': 'BigInteger',
+            'oid': 'OID',
             'regproc': 'String',
-            'regclass': 'String',
+            'regclass': 'REGCLASS',
+            'regconfig': 'REGCONFIG',
             'regtype': 'String',
             'regrole': 'String',
             'regnamespace': 'String',
             'int2vector': 'ARRAY',
             'oidvector': 'ARRAY',
             'pg_node_tree': 'Text',
+            'jsonpath': 'JSONPATH',
+            'macaddr8': 'MACADDR8',
+            'char': 'CHAR',
+            'int4range': 'INT4RANGE',
+            'int8range': 'INT8RANGE',
+            'numrange': 'NUMRANGE',
+            'daterange': 'DATERANGE',
+            'tsrange': 'TSRANGE',
+            'tstzrange': 'TSTZRANGE',
+            'int4multirange': 'INT4MULTIRANGE',
+            'int8multirange': 'INT8MULTIRANGE',
+            'nummultirange': 'NUMMULTIRANGE',
+            'datemultirange': 'DATEMULTIRANGE',
+            'tsmultirange': 'TSMULTIRANGE',
+            'tstzmultirange': 'TSTZMULTIRANGE',
+            '_varchar': 'ARRAY(String)',
+            '_text': 'ARRAY(Text)',
+            '_bool': 'ARRAY(Boolean)',
+            '_int2': 'ARRAY(SmallInteger)',
+            '_int4': 'ARRAY(Integer)',
+            '_int8': 'ARRAY(BigInteger)',
+            '_float4': 'ARRAY(Float)',
+            '_float8': 'ARRAY(Float)',
+            '_numeric': 'ARRAY(Numeric)',
+            '_date': 'ARRAY(Date)',
+            '_time': 'ARRAY(Time)',
+            '_timetz': 'ARRAY(Time)',
+            '_timestamp': 'ARRAY(DateTime)',
+            '_timestamptz': 'ARRAY(DateTime)',
+            '_uuid': 'ARRAY(Uuid)',
+            '_json': 'ARRAY(JSON)',
+            '_jsonb': 'ARRAY(JSONB)',
+            '_inet': 'ARRAY(INET)',
+            '_cidr': 'ARRAY(CIDR)',
+            '_macaddr': 'ARRAY(MACADDR)',
+            '_macaddr8': 'ARRAY(MACADDR8)',
             'varchar': 'String',        # 别名 for character varying
             'int': 'Integer',           # 别名 for integer
             'int2': 'SmallInteger',     # smallint 别名
@@ -439,12 +499,49 @@ class GenConstant:
             'oid': 'int',
             'regproc': 'str',
             'regclass': 'str',
+            'regconfig': 'str',
             'regtype': 'str',
             'regrole': 'str',
             'regnamespace': 'str',
             'int2vector': 'list',
             'oidvector': 'list',
             'pg_node_tree': 'str',
+            'jsonpath': 'str',
+            'macaddr8': 'str',
+            'char': 'str',
+            'int4range': 'list',
+            'int8range': 'list',
+            'numrange': 'list',
+            'daterange': 'list',
+            'tsrange': 'list',
+            'tstzrange': 'list',
+            'int4multirange': 'list',
+            'int8multirange': 'list',
+            'nummultirange': 'list',
+            'datemultirange': 'list',
+            'tsmultirange': 'list',
+            'tstzmultirange': 'list',
+            '_varchar': 'list',
+            '_text': 'list',
+            '_bool': 'list',
+            '_int2': 'list',
+            '_int4': 'list',
+            '_int8': 'list',
+            '_float4': 'list',
+            '_float8': 'list',
+            '_numeric': 'list',
+            '_date': 'list',
+            '_time': 'list',
+            '_timetz': 'list',
+            '_timestamp': 'list',
+            '_timestamptz': 'list',
+            '_uuid': 'list',
+            '_json': 'list',
+            '_jsonb': 'list',
+            '_inet': 'list',
+            '_cidr': 'list',
+            '_macaddr': 'list',
+            '_macaddr8': 'list',
             'varchar': 'str',           # 别名 for character varying
             'int': 'int',               # 别名 for integer
             'int2': 'int',              # smallint 别名

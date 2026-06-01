@@ -305,11 +305,46 @@ class GenTableColumnDao:
         if DataBaseConfig.db_type == 'postgresql':
             query_sql = """
             select
-                column_name, is_required, is_pk, sort, column_comment, is_increment, column_type
+                lc.column_name,
+                lc.is_required,
+                lc.is_pk,
+                lc.sort,
+                lc.column_comment,
+                lc.is_increment,
+                case
+                    when lc.column_type = 'USER-DEFINED' and pg_type.typtype = 'e' and isc.udt_name is not null
+                    then concat(
+                        'USER-DEFINED(',
+                        isc.udt_name,
+                        case
+                            when pg_enum_values.enum_labels is not null
+                            then concat('|', pg_enum_values.enum_labels)
+                            else ''
+                        end,
+                        ')'
+                    )
+                    else lc.column_type
+                end as column_type
             from
-                list_column
+                list_column lc
+                left join information_schema.columns isc
+                    on isc.table_schema = current_schema()
+                    and isc.table_name = lc.table_name
+                    and isc.column_name = lc.column_name
+                left join pg_type
+                    on pg_type.typname = isc.udt_name
+                left join (
+                    select
+                        enumtypid,
+                        string_agg(enumlabel, '|' order by enumsortorder) as enum_labels
+                    from
+                        pg_enum
+                    group by
+                        enumtypid
+                ) pg_enum_values
+                    on pg_enum_values.enumtypid = pg_type.oid
             where
-                table_name = :table_name
+                lc.table_name = :table_name
             """
         else:
             query_sql = """

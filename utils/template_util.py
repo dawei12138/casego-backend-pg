@@ -1,5 +1,7 @@
 import json
+import keyword
 import os
+import re
 from datetime import datetime
 from jinja2 import Environment, FileSystemLoader
 from typing import Dict, List, Set
@@ -8,6 +10,7 @@ from config.env import DataBaseConfig
 from exceptions.exception import ServiceWarning
 from module_generator.entity.vo.gen_vo import GenTableModel, GenTableColumnModel
 from utils.common_util import CamelCaseUtil, SnakeCaseUtil
+from utils.gen_util import GenUtils
 from utils.string_util import StringUtil
 
 
@@ -36,6 +39,10 @@ class TemplateInitializer:
                     'camel_to_snake': SnakeCaseUtil.camel_to_snake,
                     'snake_to_camel': CamelCaseUtil.snake_to_camel,
                     'get_sqlalchemy_type': TemplateUtils.get_sqlalchemy_type,
+                    'get_vo_python_type': TemplateUtils.get_vo_python_type,
+                    'is_enum_column': TemplateUtils.is_enum_column,
+                    'get_enum_options_name': TemplateUtils.get_enum_options_name,
+                    'py_repr': repr,
                 }
             )
             return env
@@ -52,6 +59,35 @@ class TemplateUtils:
     FRONTEND_PROJECT_PATH = 'frontend'
     BACKEND_PROJECT_PATH = 'backend'
     DEFAULT_PARENT_MENU_ID = '3'
+    POSTGRESQL_SQLALCHEMY_TYPES = {
+        'ARRAY',
+        'BIT',
+        'CIDR',
+        'DATERANGE',
+        'DATEMULTIRANGE',
+        'ENUM',
+        'INET',
+        'INT4MULTIRANGE',
+        'INT4RANGE',
+        'INT8MULTIRANGE',
+        'INT8RANGE',
+        'JSONB',
+        'JSONPATH',
+        'MACADDR',
+        'MACADDR8',
+        'MONEY',
+        'NUMMULTIRANGE',
+        'NUMRANGE',
+        'OID',
+        'REGCLASS',
+        'REGCONFIG',
+        'TSQUERY',
+        'TSVECTOR',
+        'TSMULTIRANGE',
+        'TSRANGE',
+        'TSTZMULTIRANGE',
+        'TSTZRANGE',
+    }
 
     @classmethod
     def prepare_context(cls, gen_table: GenTableModel):
@@ -63,6 +99,7 @@ class TemplateUtils:
         """
         if not gen_table.options:
             raise ServiceWarning(message='请先完善生成配置信息')
+        cls.normalize_render_columns(gen_table)
         class_name = gen_table.class_name
         module_name = gen_table.module_name
         business_name = gen_table.business_name
@@ -90,6 +127,12 @@ class TemplateUtils:
             'columns': gen_table.columns,
             'table': gen_table,
             'dicts': cls.get_dicts(gen_table),
+            'enumFields': cls.get_enum_fields(gen_table),
+            'enumImportNames': cls.get_enum_import_names(gen_table),
+            'frontendJsonFields': cls.get_frontend_field_names(
+                gen_table, [GenConstant.HTML_JSON, GenConstant.HTML_ARRAY, GenConstant.HTML_RANGE]
+            ),
+            'frontendBinaryFields': cls.get_frontend_field_names(gen_table, [GenConstant.HTML_BINARY]),
             'dbType': DataBaseConfig.db_type,
             'column_not_add_show': GenConstant.COLUMNNAME_NOT_ADD_SHOW,
             'column_not_edit_show': GenConstant.COLUMNNAME_NOT_EDIT_SHOW,
@@ -103,6 +146,59 @@ class TemplateUtils:
             cls.set_sub_context(context, gen_table)
 
         return context
+
+    @classmethod
+    def normalize_render_columns(cls, gen_table: GenTableModel):
+        """
+        补齐生成模板所需的字段元数据，兼容修复前已导入的字段配置。
+
+        :param gen_table: 生成表的配置信息
+        :return:
+        """
+        for column in gen_table.columns or []:
+            cls.normalize_render_column(column)
+        if gen_table.sub_table is not None:
+            for column in gen_table.sub_table.columns or []:
+                cls.normalize_render_column(column)
+
+    @classmethod
+    def normalize_render_column(cls, column: GenTableColumnModel):
+        """
+        根据column_type补齐python_type和html_type，避免旧配置渲染出Optional[]。
+
+        :param column: 字段配置
+        :return:
+        """
+        data_type = cls.get_db_type(column.column_type)
+        if not column.python_type:
+            column.python_type = StringUtil.get_mapping_value_by_key_ignore_case(
+                GenConstant.DB_TO_PYTHON_TYPE_MAPPING, data_type
+            )
+        if cls.is_enum_column(column):
+            column.html_type = GenConstant.HTML_SELECT
+            return
+        html_type = GenUtils.get_column_html_type(data_type, column.python_type, column.column_type)
+        if not column.html_type or column.html_type in [
+            GenConstant.HTML_INPUT,
+            GenConstant.HTML_TEXTAREA,
+            GenConstant.HTML_DATETIME,
+        ]:
+            column.html_type = html_type
+
+    @classmethod
+    def get_frontend_field_names(cls, gen_table: GenTableModel, html_types: List[str]) -> List[str]:
+        """
+        获取前端需要特殊序列化的字段名。
+
+        :param gen_table: 生成表的配置信息
+        :param html_types: 前端显示类型列表
+        :return: 字段名列表
+        """
+        return [
+            column.python_field
+            for column in gen_table.columns or []
+            if column.python_field and column.html_type in html_types
+        ]
 
     @classmethod
     def set_menu_context(cls, context: Dict, gen_table: GenTableModel):
@@ -156,7 +252,7 @@ class TemplateUtils:
         context['subclassName'] = sub_class_name.lower()
 
     @classmethod
-    def get_template_list(cls, tpl_category: str, tpl_web_type: str):
+    def get_template_list(cls, tpl_category: str, tpl_web_type: str, gen_table: GenTableModel = None):
         """
         获取模板列表
 
@@ -176,6 +272,9 @@ class TemplateUtils:
             'sql/sql.jinja2',
             'js/api.js.jinja2',
         ]
+        if gen_table is not None and cls.get_enum_fields(gen_table):
+            templates.append('python/enum.py.jinja2')
+            templates.append('js/enums.js.jinja2')
         if tpl_category == GenConstant.TPL_CRUD:
             templates.append(f'{use_web_type}/index.vue.jinja2')
         elif tpl_category == GenConstant.TPL_TREE:
@@ -207,6 +306,8 @@ class TemplateUtils:
             return f'{python_path}/dao/{business_name}_dao.py'
         elif 'do.py.jinja2' in template:
             return f'{python_path}/entity/do/{business_name}_do.py'
+        elif 'enum.py.jinja2' in template:
+            return f'{python_path}/entity/enums/{business_name}_enum.py'
         elif 'service.py.jinja2' in template:
             return f'{python_path}/service/{business_name}_service.py'
         elif 'vo.py.jinja2' in template:
@@ -215,6 +316,8 @@ class TemplateUtils:
             return f'{cls.BACKEND_PROJECT_PATH}/sql/{business_name}_menu.sql'
         elif 'api.js.jinja2' in template:
             return f'{vue_path}/api/{module_name}/{business_name}.js'
+        elif 'enums.js.jinja2' in template:
+            return f'{vue_path}/api/{module_name}/{business_name}_enum.js'
         elif 'index.vue.jinja2' in template or 'index-tree.vue.jinja2' in template:
             return f'{vue_path}/views/{module_name}/{business_name}/index.vue'
         return ''
@@ -239,6 +342,12 @@ class TemplateUtils:
         """
         columns = gen_table.columns or []
         import_list = set()
+        enum_import_names = cls.get_enum_import_names(gen_table)
+        if enum_import_names:
+            import_list.add(
+                f'from {gen_table.package_name}.entity.enums.{gen_table.business_name}_enum import '
+                f'{", ".join(enum_import_names)}'
+            )
         for column in columns:
             if column.python_type in GenConstant.TYPE_DATE:
                 import_list.add(f'from datetime import {column.python_type}')
@@ -263,23 +372,45 @@ class TemplateUtils:
         """
         columns = gen_table.columns or []
         import_list = set()
+        enum_import_names = cls.get_enum_import_names(gen_table)
+        if enum_import_names:
+            import_list.add(
+                f'from {gen_table.package_name}.entity.enums.{gen_table.business_name}_enum import '
+                f'{", ".join(enum_import_names)}'
+            )
         import_list.add('from sqlalchemy import Column')
         for column in columns:
-            data_type = cls.get_db_type(column.column_type)
-            if data_type in GenConstant.COLUMNTYPE_GEOMETRY:
+            if cls.get_db_type(column.column_type) in GenConstant.COLUMNTYPE_GEOMETRY:
                 import_list.add('from geoalchemy2 import Geometry')
-            import_list.add(
-                f'from sqlalchemy import {StringUtil.get_mapping_value_by_key_ignore_case(GenConstant.DB_TO_SQLALCHEMY_TYPE_MAPPING, data_type)}'
-            )
+            cls.add_do_type_imports(import_list, cls.get_sqlalchemy_type(column.column_type))
         if gen_table.sub:
             import_list.add('from sqlalchemy import ForeignKey')
             sub_columns = gen_table.sub_table.columns or []
             for sub_column in sub_columns:
-                data_type = cls.get_db_type(sub_column.column_type)
-                import_list.add(
-                    f'from sqlalchemy import {StringUtil.get_mapping_value_by_key_ignore_case(GenConstant.DB_TO_SQLALCHEMY_TYPE_MAPPING, data_type)}'
-                )
-        return cls.merge_same_imports(list(import_list), 'from sqlalchemy import')
+                cls.add_do_type_imports(import_list, cls.get_sqlalchemy_type(sub_column.column_type))
+        imports = cls.merge_same_imports(list(import_list), 'from sqlalchemy import')
+        return cls.merge_same_imports(imports, 'from sqlalchemy.dialects.postgresql import')
+
+    @classmethod
+    def add_do_type_imports(cls, import_list: Set[str], sqlalchemy_type: str):
+        """
+        根据SQLAlchemy类型表达式补充DO模型导入。
+
+        :param import_list: 导入语句集合
+        :param sqlalchemy_type: SQLAlchemy类型表达式，如String(100)、ARRAY(JSONB)
+        :return:
+        """
+        if not sqlalchemy_type:
+            return
+        for type_name in re.findall(r'\b[A-Z][A-Za-z0-9_]*\b', sqlalchemy_type):
+            if type_name in ['True', 'False', 'None']:
+                continue
+            if type_name.endswith('Enum') and type_name != 'Enum':
+                continue
+            if type_name in cls.POSTGRESQL_SQLALCHEMY_TYPES:
+                import_list.add(f'from sqlalchemy.dialects.postgresql import {type_name}')
+            else:
+                import_list.add(f'from sqlalchemy import {type_name}')
 
     @classmethod
     def get_db_type(cls, column_type: str) -> str:
@@ -292,6 +423,174 @@ class TemplateUtils:
         if '(' in column_type:
             return column_type.split('(')[0]
         return column_type
+
+    @classmethod
+    def parse_postgresql_enum_type(cls, column_type: str) -> Dict:
+        """
+        解析PostgreSQL enum类型描述。
+
+        格式:
+        - USER-DEFINED(demo_status_enum)
+        - USER-DEFINED(demo_status_enum|DRAFT|ACTIVE|DISABLED)
+        """
+        if not column_type or cls.get_db_type(column_type).upper() != 'USER-DEFINED' or '(' not in column_type:
+            return {}
+        payload = column_type.split('(', 1)[1].rsplit(')', 1)[0]
+        if not payload:
+            return {}
+        enum_parts = payload.split('|')
+        enum_type_name = enum_parts[0].strip()
+        enum_labels = [enum_label for enum_label in enum_parts[1:] if enum_label != '']
+        if not enum_type_name:
+            return {}
+
+        return {
+            'enum_type_name': enum_type_name,
+            'enum_labels': enum_labels,
+            'enum_class_name': cls.get_enum_class_name(enum_type_name),
+            'use_db_labels': cls.should_use_db_enum_labels(enum_labels),
+        }
+
+    @classmethod
+    def get_enum_fields(cls, gen_table: GenTableModel) -> List[Dict]:
+        """
+        获取生成DO/VO模型时需要声明的Python枚举类。
+        """
+        enum_fields = []
+        enum_field_keys = set()
+        columns = list(gen_table.columns or [])
+        if gen_table.sub_table is not None:
+            columns.extend(gen_table.sub_table.columns or [])
+
+        for column in columns:
+            enum_info = cls.parse_postgresql_enum_type(column.column_type)
+            enum_labels = enum_info.get('enum_labels') or []
+            if not enum_info or not enum_labels:
+                continue
+            enum_key = (enum_info['enum_type_name'], tuple(enum_labels))
+            if enum_key in enum_field_keys:
+                continue
+            enum_field_keys.add(enum_key)
+            enum_fields.append(
+                {
+                    'enum_type_name': enum_info['enum_type_name'],
+                    'enum_class_name': enum_info['enum_class_name'],
+                    'enum_options_name': cls.get_enum_options_name(column),
+                    'use_db_labels': enum_info['use_db_labels'],
+                    'enum_values': cls.get_enum_values(enum_labels),
+                }
+            )
+
+        return enum_fields
+
+    @classmethod
+    def get_enum_import_names(cls, gen_table: GenTableModel) -> List[str]:
+        """
+        获取DO/VO需要导入的枚举类名。
+        """
+        return sorted({enum_field.get('enum_class_name') for enum_field in cls.get_enum_fields(gen_table)})
+
+    @classmethod
+    def get_enum_values(cls, enum_labels: List[str]) -> List[Dict]:
+        """
+        生成Python枚举成员名和值。
+        """
+        enum_values = []
+        used_member_names = set()
+        use_db_labels = cls.should_use_db_enum_labels(enum_labels)
+        for enum_label in enum_labels:
+            member_name = cls.get_enum_member_name(enum_label)
+            original_member_name = member_name
+            index = 2
+            while member_name in used_member_names:
+                member_name = f'{original_member_name}_{index}'
+                index += 1
+            used_member_names.add(member_name)
+            enum_values.append(
+                {
+                    'name': member_name,
+                    'value': enum_label if use_db_labels else enum_label.lower(),
+                    'db_label': enum_label,
+                }
+            )
+        return enum_values
+
+    @classmethod
+    def should_use_db_enum_labels(cls, enum_labels: List[str]) -> bool:
+        """
+        判断Python枚举值是否应直接使用数据库label。
+
+        PostgreSQL enum常见建模会使用DRAFT/ACTIVE这类大写label。此时Python枚举值转为draft/active，
+        SQLAlchemy仍会按枚举成员名写入数据库，接口JSON Schema也更贴近日常API值。
+        """
+        return not enum_labels or not all(re.match(r'^[A-Z][A-Z0-9_]*$', enum_label) for enum_label in enum_labels)
+
+    @classmethod
+    def get_enum_class_name(cls, enum_type_name: str) -> str:
+        """
+        根据数据库enum类型名生成Python枚举类名。
+        """
+        class_parts = [part for part in re.split(r'[^0-9A-Za-z]+', enum_type_name) if part]
+        enum_class_name = ''.join(part[:1].upper() + part[1:].lower() for part in class_parts)
+        if not enum_class_name:
+            return 'GeneratedEnum'
+        if enum_class_name[0].isdigit():
+            enum_class_name = f'Enum{enum_class_name}'
+        return enum_class_name
+
+    @classmethod
+    def get_enum_member_name(cls, enum_label: str) -> str:
+        """
+        根据数据库enum label生成合法的Python枚举成员名。
+        """
+        member_name = re.sub(r'\W+', '_', enum_label).strip('_').upper()
+        if not member_name:
+            member_name = 'VALUE'
+        if member_name[0].isdigit() or keyword.iskeyword(member_name.lower()):
+            member_name = f'VALUE_{member_name}'
+        return member_name
+
+    @classmethod
+    def get_vo_python_type(cls, column: GenTableColumnModel) -> str:
+        """
+        获取VO字段Python类型。
+        """
+        enum_info = cls.parse_postgresql_enum_type(column.column_type)
+        if enum_info and enum_info.get('enum_labels'):
+            return enum_info['enum_class_name']
+        return column.python_type
+
+    @classmethod
+    def is_enum_column(cls, column: GenTableColumnModel) -> bool:
+        """
+        判断字段是否为带labels的PostgreSQL枚举字段。
+        """
+        enum_info = cls.parse_postgresql_enum_type(column.column_type)
+        return bool(enum_info and enum_info.get('enum_labels'))
+
+    @classmethod
+    def get_enum_options_name(cls, column: GenTableColumnModel) -> str:
+        """
+        获取前端枚举options常量名。
+        """
+        enum_info = cls.parse_postgresql_enum_type(column.column_type)
+        if not enum_info:
+            return ''
+        enum_class_name = enum_info['enum_class_name']
+        return enum_class_name[:1].lower() + enum_class_name[1:] + 'Options'
+
+    @classmethod
+    def get_column_length(cls, column_type: str) -> int:
+        """
+        获取字段长度。
+
+        :param column_type: 字段类型
+        :return: 字段长度
+        """
+        if '(' in column_type:
+            length = column_type.split('(')[1].split(')')[0].split(',')[0].strip()
+            return int(length) if length.isdigit() else 0
+        return 0
 
     @classmethod
     def merge_same_imports(cls, imports: List[str], import_start: str) -> List[str]:
@@ -312,10 +611,10 @@ class TemplateUtils:
                 merged_imports.append(import_stmt)
 
         if _imports:
-            merged_datetime_import = f'{import_start} {", ".join(_imports)}'
+            merged_datetime_import = f'{import_start} {", ".join(sorted(set(_imports)))}'
             merged_imports.append(merged_datetime_import)
 
-        return merged_imports
+        return sorted(merged_imports)
 
     @classmethod
     def get_dicts(cls, gen_table: GenTableModel):
@@ -450,18 +749,33 @@ class TemplateUtils:
         """
         if '(' in column_type:
             column_type_list = column_type.split('(')
-            if column_type_list[0] in GenConstant.COLUMNTYPE_STR:
+            data_type = column_type_list[0]
+            if data_type.upper() == 'USER-DEFINED':
+                enum_info = cls.parse_postgresql_enum_type(column_type)
+                enum_type_name = enum_info.get('enum_type_name')
+                enum_labels = enum_info.get('enum_labels') or []
+                enum_class_name = enum_info.get('enum_class_name')
+                if enum_labels and enum_class_name:
+                    if enum_info.get('use_db_labels'):
+                        return (
+                            f"ENUM({enum_class_name}, values_callable=lambda x: [e.value for e in x], "
+                            f"name='{enum_type_name}', create_type=False)"
+                        )
+                    return f"ENUM({enum_class_name}, name='{enum_type_name}', create_type=False)"
+                return f"ENUM(name='{enum_type_name}', create_type=False)"
+            mapped_type = StringUtil.get_mapping_value_by_key_ignore_case(
+                GenConstant.DB_TO_SQLALCHEMY_TYPE_MAPPING, data_type
+            )
+            if data_type in GenConstant.COLUMNTYPE_STR:
                 sqlalchemy_type = (
-                    StringUtil.get_mapping_value_by_key_ignore_case(
-                        GenConstant.DB_TO_SQLALCHEMY_TYPE_MAPPING, column_type_list[0]
-                    )
+                    mapped_type
                     + '('
                     + column_type_list[1]
                 )
+            elif mapped_type in ['Numeric', 'DECIMAL']:
+                sqlalchemy_type = mapped_type + '(' + column_type_list[1]
             else:
-                sqlalchemy_type = StringUtil.get_mapping_value_by_key_ignore_case(
-                    GenConstant.DB_TO_SQLALCHEMY_TYPE_MAPPING, column_type_list[0]
-                )
+                sqlalchemy_type = mapped_type
         else:
             sqlalchemy_type = StringUtil.get_mapping_value_by_key_ignore_case(
                 GenConstant.DB_TO_SQLALCHEMY_TYPE_MAPPING, column_type

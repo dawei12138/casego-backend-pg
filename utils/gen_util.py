@@ -51,21 +51,7 @@ class GenUtils:
         )
         column.query_type = GenConstant.QUERY_EQ
 
-        if cls.arrays_contains(GenConstant.COLUMNTYPE_STR, data_type) or cls.arrays_contains(
-            GenConstant.COLUMNTYPE_TEXT, data_type
-        ):
-            # 字符串长度超过500设置为文本域
-            column_length = cls.get_column_length(column.column_type)
-            html_type = (
-                GenConstant.HTML_TEXTAREA
-                if column_length >= 500 or cls.arrays_contains(GenConstant.COLUMNTYPE_TEXT, data_type)
-                else GenConstant.HTML_INPUT
-            )
-            column.html_type = html_type
-        elif cls.arrays_contains(GenConstant.COLUMNTYPE_TIME, data_type):
-            column.html_type = GenConstant.HTML_DATETIME
-        elif cls.arrays_contains(GenConstant.COLUMNTYPE_NUMBER, data_type):
-            column.html_type = GenConstant.HTML_INPUT
+        column.html_type = cls.get_column_html_type(data_type, column.python_type, column.column_type)
 
         # 插入字段（默认所有字段都需要插入）
         column.is_insert = GenConstant.REQUIRE
@@ -114,6 +100,91 @@ class GenUtils:
         :return: 校验结果
         """
         return target_value in arr
+
+    @classmethod
+    def get_column_html_type(cls, data_type: str, python_type: str, column_type: str) -> str:
+        """
+        根据数据库类型和Python类型选择前端生成组件类型。
+
+        param data_type: 标准化后的数据库类型
+        param python_type: Python类型
+        param column_type: 原始字段类型
+        :return: 前端显示类型
+        """
+        data_type = (data_type or '').lower()
+        python_type = python_type or ''
+        range_types = [
+            'range',
+            'int4range',
+            'int8range',
+            'numrange',
+            'daterange',
+            'tsrange',
+            'tstzrange',
+            'int4multirange',
+            'int8multirange',
+            'nummultirange',
+            'datemultirange',
+            'tsmultirange',
+            'tstzmultirange',
+        ]
+        number_types = [
+            'tinyint',
+            'smallint',
+            'int2',
+            'mediumint',
+            'int',
+            'int4',
+            'number',
+            'integer',
+            'bigint',
+            'int8',
+            'real',
+            'float',
+            'float4',
+            'float8',
+            'double',
+            'double precision',
+            'decimal',
+            'numeric',
+            'money',
+            'oid',
+        ]
+
+        if data_type == 'date':
+            return GenConstant.HTML_DATE
+        if data_type in ['time', 'time without time zone']:
+            return GenConstant.HTML_TIME
+        if data_type in ['timetz', 'time with time zone']:
+            return GenConstant.HTML_TIME_TZ
+        if data_type in ['timestamp', 'timestamp without time zone']:
+            return GenConstant.HTML_DATETIME
+        if data_type in ['timestamptz', 'timestamp with time zone']:
+            return GenConstant.HTML_DATETIME_TZ
+        if data_type == 'interval':
+            return GenConstant.HTML_DURATION
+        if data_type in ['boolean', 'bool'] or python_type == 'bool':
+            return GenConstant.HTML_SWITCH
+        if data_type in ['json', 'jsonb', 'composite'] or python_type == 'dict':
+            return GenConstant.HTML_JSON
+        if data_type.startswith('_') or data_type in ['array', 'int2vector', 'oidvector']:
+            return GenConstant.HTML_ARRAY
+        if data_type in range_types:
+            return GenConstant.HTML_RANGE
+        if data_type == 'bytea' or python_type == 'bytes':
+            return GenConstant.HTML_BINARY
+        if data_type in GenConstant.COLUMNTYPE_TEXT:
+            return GenConstant.HTML_TEXTAREA
+        if data_type in GenConstant.COLUMNTYPE_STR:
+            column_length = cls.get_column_length(column_type)
+            return GenConstant.HTML_TEXTAREA if column_length >= 500 else GenConstant.HTML_INPUT
+        if data_type in ['bit', 'bit varying']:
+            return GenConstant.HTML_INPUT
+        if data_type in number_types or python_type in ['Decimal', 'float', 'int']:
+            return GenConstant.HTML_NUMBER
+        if python_type == 'list':
+            return GenConstant.HTML_ARRAY
+        return GenConstant.HTML_INPUT
 
     @classmethod
     def get_module_name(cls, package_name: str) -> str:
@@ -195,8 +266,8 @@ class GenUtils:
         :return: 字段长度
         """
         if '(' in column_type:
-            length = len(column_type.split('(')[1].split(')')[0])
-            return length
+            length = column_type.split('(')[1].split(')')[0].split(',')[0].strip()
+            return int(length) if length.isdigit() else 0
         return 0
 
     @classmethod

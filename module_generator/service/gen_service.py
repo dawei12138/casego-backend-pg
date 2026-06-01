@@ -172,6 +172,8 @@ class GenTableService:
         """
         gen_table = await GenTableDao.get_gen_table_by_id(query_db, table_id)
         result = await cls.set_table_from_options(GenTableModel(**CamelCaseUtil.transform_result(gen_table)))
+        await cls.fill_postgresql_user_defined_types(query_db, result)
+        TemplateUtils.normalize_render_columns(result)
 
         return result
 
@@ -260,9 +262,10 @@ class GenTableService:
         )
         await cls.set_sub_table(query_db, gen_table)
         await cls.set_pk_column(gen_table)
+        await cls.fill_postgresql_user_defined_types(query_db, gen_table)
         env = TemplateInitializer.init_jinja2()
         context = TemplateUtils.prepare_context(gen_table)
-        template_list = TemplateUtils.get_template_list(gen_table.tpl_category, gen_table.tpl_web_type)
+        template_list = TemplateUtils.get_template_list(gen_table.tpl_category, gen_table.tpl_web_type, gen_table)
         preview_code_result = {}
         for template in template_list:
             render_content = env.get_template(template).render(**context)
@@ -330,8 +333,9 @@ class GenTableService:
         )
         await cls.set_sub_table(query_db, gen_table)
         await cls.set_pk_column(gen_table)
+        await cls.fill_postgresql_user_defined_types(query_db, gen_table)
         context = TemplateUtils.prepare_context(gen_table)
-        template_list = TemplateUtils.get_template_list(gen_table.tpl_category, gen_table.tpl_web_type)
+        template_list = TemplateUtils.get_template_list(gen_table.tpl_category, gen_table.tpl_web_type, gen_table)
         output_files = [TemplateUtils.get_file_name(template, gen_table) for template in template_list]
 
         return [template_list, output_files, context, gen_table]
@@ -388,6 +392,7 @@ class GenTableService:
                     ):
                         column.is_required = prev_column.is_required
                         column.html_type = prev_column.html_type
+                    TemplateUtils.normalize_render_column(column)
                     await GenTableColumnDao.edit_gen_table_column_dao(query_db, column.model_dump(by_alias=True))
                 else:
                     await GenTableColumnDao.add_gen_table_column_dao(query_db, column)
@@ -435,6 +440,30 @@ class GenTableService:
                     break
             if gen_table.sub_table.columns is None:
                 gen_table.sub_table.pk_column = gen_table.sub_table.columns[0]
+
+    @classmethod
+    async def fill_postgresql_user_defined_types(cls, query_db: AsyncSession, gen_table: GenTableModel):
+        """
+        补齐PostgreSQL用户自定义类型的真实类型名。
+
+        历史导入的字段可能只保存了USER-DEFINED，生成DO模型时缺少真实enum类型名会退化成String，
+        asyncpg插入时就会把参数按VARCHAR发送。这里在详情、预览、生成前从真实表结构补回类型名。
+        """
+        if DataBaseConfig.db_type != 'postgresql' or not gen_table or not gen_table.table_name:
+            return
+
+        db_columns = await GenTableColumnDao.get_gen_db_table_columns_by_name(query_db, gen_table.table_name)
+        column_type_map = {
+            column.column_name: column.column_type
+            for column in [GenTableColumnModel(**item) for item in CamelCaseUtil.transform_result(db_columns)]
+        }
+        for column in gen_table.columns or []:
+            db_column_type = column_type_map.get(column.column_name)
+            if column.column_type == 'USER-DEFINED' and db_column_type and db_column_type.startswith('USER-DEFINED('):
+                column.column_type = db_column_type
+
+        if gen_table.sub_table is not None:
+            await cls.fill_postgresql_user_defined_types(query_db, gen_table.sub_table)
 
     @classmethod
     async def set_table_from_options(cls, gen_table: GenTableModel):
@@ -492,8 +521,11 @@ class GenTableColumnService:
         :return: 业务表字段列表信息对象
         """
         gen_table_column_list_result = await GenTableColumnDao.get_gen_table_column_list_by_table_id(query_db, table_id)
-
-        return [
+        result = [
             GenTableColumnModel(**gen_table_column)
             for gen_table_column in CamelCaseUtil.transform_result(gen_table_column_list_result)
         ]
+        for column in result:
+            TemplateUtils.normalize_render_column(column)
+
+        return result
