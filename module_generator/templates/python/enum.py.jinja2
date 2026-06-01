@@ -1,0 +1,11 @@
+import enum
+
+
+{% for enum_field in enumFields %}
+class {{ enum_field.enum_class_name }}(str, enum.Enum):
+{% for enum_value in enum_field.enum_values %}
+    {{ enum_value.name }} = {{ enum_value.value | py_repr }}
+{% endfor %}
+
+
+{% endfor %}

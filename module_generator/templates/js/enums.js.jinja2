@@ -1,0 +1,8 @@
+{% for enum_field in enumFields %}
+export const {{ enum_field.enum_options_name }} = [
+{% for enum_value in enum_field.enum_values %}
+  { label: {{ enum_value.value | py_repr }}, value: {{ enum_value.value | py_repr }} }{% if not loop.last %},{% endif %}
+{% endfor %}
+]
+
+{% endfor %}
