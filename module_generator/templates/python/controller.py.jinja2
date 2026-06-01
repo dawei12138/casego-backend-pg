@@ -132,8 +132,8 @@ async def delete_{{ moduleName }}_{{ businessName }}(request: Request, {{ pk_fie
     summary='获取{{ functionName }}详情',
     description='根据主键获取{{ functionName }}详细信息',
 )
-async def query_detail_{{ moduleName }}_{{ businessName }}(request: Request, {{ pk_field }}: int, query_db: AsyncSession = Depends(get_db)):
-    logger.info(f"id:{id}")
+async def query_detail_{{ moduleName }}_{{ businessName }}(request: Request, {{ pk_field }}: {{ pkPythonType }}, query_db: AsyncSession = Depends(get_db)):
+    logger.info(f'{{ pk_field }}:{% raw %}{{% endraw %}{{ pk_field }}{% raw %}}{% endraw %}')
     {{ businessName }}_detail_result = await {{ BusinessName }}Service.{{ businessName }}_detail_services(query_db, {{ pk_field }})
     logger.info(f'获取{{ pk_field }}为{% raw %}{{% endraw %}{{ pk_field }}{% raw %}}{% endraw %}的信息成功')
 

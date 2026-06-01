@@ -311,10 +311,10 @@ class GenConstant:
             'bytea': 'LargeBinary',
             'date': 'Date',
             'time': 'Time',
-            'time with time zone': 'Time',
+            'time with time zone': 'Time(timezone=True)',
             'time without time zone': 'Time',
             'timestamp': 'DateTime',
-            'timestamp with time zone': 'DateTime',
+            'timestamp with time zone': 'DateTime(timezone=True)',
             'timestamp without time zone': 'DateTime',
             'interval': 'Interval',
             'json': 'JSON',
@@ -331,7 +331,7 @@ class GenConstant:
             'polygon': 'Geometry',
             'circle': 'Geometry',
             'bit': 'BIT',
-            'bit varying': 'BIT',
+            'bit varying': 'BIT(varying=True)',
             'tsvector': 'TSVECTOR',
             'tsquery': 'TSQUERY',
             'xml': 'String',
@@ -378,9 +378,9 @@ class GenConstant:
             '_numeric': 'ARRAY(Numeric)',
             '_date': 'ARRAY(Date)',
             '_time': 'ARRAY(Time)',
-            '_timetz': 'ARRAY(Time)',
+            '_timetz': 'ARRAY(Time(timezone=True))',
             '_timestamp': 'ARRAY(DateTime)',
-            '_timestamptz': 'ARRAY(DateTime)',
+            '_timestamptz': 'ARRAY(DateTime(timezone=True))',
             '_uuid': 'ARRAY(Uuid)',
             '_json': 'ARRAY(JSON)',
             '_jsonb': 'ARRAY(JSONB)',
@@ -398,8 +398,8 @@ class GenConstant:
             'double': 'Float',          # double 类型 (list_column 返回的类型)
             'float': 'Float',           # float 类型
             'bool': 'Boolean',          # boolean 别名
-            'timestamptz': 'DateTime',  # timestamp with time zone 别名
-            'timetz': 'Time',           # time with time zone 别名
+            'timestamptz': 'DateTime(timezone=True)',  # timestamp with time zone 别名
+            'timetz': 'Time(timezone=True)',           # time with time zone 别名
             'USER-DEFINED': 'String',   # PostgreSQL 枚举类型 (映射为 String)
         }
         if DataBaseConfig.db_type == 'postgresql'
@@ -484,8 +484,8 @@ class GenConstant:
             'path': 'list',
             'polygon': 'list',
             'circle': 'list',
-            'bit': 'int',
-            'bit varying': 'int',
+            'bit': 'str',
+            'bit varying': 'str',
             'tsvector': 'str',
             'tsquery': 'str',
             'xml': 'str',

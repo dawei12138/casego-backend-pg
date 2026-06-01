@@ -121,6 +121,7 @@ class TemplateUtils:
             'author': gen_table.function_author,
             'datetime': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'pkColumn': gen_table.pk_column,
+            'pkPythonType': cls.get_api_python_type(gen_table.pk_column),
             'doImportList': cls.get_do_import_list(gen_table),
             'voImportList': cls.get_vo_import_list(gen_table),
             'permissionPrefix': cls.get_permission_prefix(module_name, business_name),
@@ -133,6 +134,12 @@ class TemplateUtils:
                 gen_table, [GenConstant.HTML_JSON, GenConstant.HTML_ARRAY, GenConstant.HTML_RANGE]
             ),
             'frontendBinaryFields': cls.get_frontend_field_names(gen_table, [GenConstant.HTML_BINARY]),
+            'frontendEmptyStringNullFields': cls.get_frontend_empty_string_null_field_names(gen_table),
+            'frontendEmptyContainerNullFields': cls.get_frontend_empty_container_null_field_names(gen_table),
+            'backendEmptyValueNullFields': cls.get_backend_empty_value_null_fields(gen_table.columns or []),
+            'subBackendEmptyValueNullFields': cls.get_backend_empty_value_null_fields(
+                gen_table.sub_table.columns if gen_table.sub_table is not None else []
+            ),
             'dbType': DataBaseConfig.db_type,
             'column_not_add_show': GenConstant.COLUMNNAME_NOT_ADD_SHOW,
             'column_not_edit_show': GenConstant.COLUMNNAME_NOT_EDIT_SHOW,
@@ -199,6 +206,74 @@ class TemplateUtils:
             for column in gen_table.columns or []
             if column.python_field and column.html_type in html_types
         ]
+
+    @classmethod
+    def get_frontend_empty_string_null_field_names(cls, gen_table: GenTableModel) -> List[str]:
+        """
+        获取前端提交前需要把空字符串转为null的字段名。
+
+        PostgreSQL强类型字段收到空字符串时通常会在新增/编辑阶段报类型转换错误。
+        """
+        special_db_types = {
+            'uuid',
+            'inet',
+            'cidr',
+            'macaddr',
+            'macaddr8',
+            'bit',
+            'bit varying',
+            'jsonpath',
+            'tsvector',
+            'tsquery',
+            'regclass',
+            'regconfig',
+            'interval',
+        }
+        special_html_types = {
+            GenConstant.HTML_JSON,
+            GenConstant.HTML_ARRAY,
+            GenConstant.HTML_RANGE,
+            GenConstant.HTML_BINARY,
+            GenConstant.HTML_DURATION,
+        }
+        return [
+            column.python_field
+            for column in gen_table.columns or []
+            if column.python_field
+            and (column.html_type in special_html_types or cls.get_db_type(column.column_type).lower() in special_db_types)
+        ]
+
+    @classmethod
+    def get_frontend_empty_container_null_field_names(cls, gen_table: GenTableModel) -> List[str]:
+        """
+        获取前端提交前需要把空数组/空对象转为null的字段名。
+        """
+        return [field['alias_name'] for field in cls.get_backend_empty_value_null_fields(gen_table.columns or [])]
+
+    @classmethod
+    def get_backend_empty_value_null_fields(cls, columns: List[GenTableColumnModel]) -> List[Dict]:
+        """
+        获取后端模型/DAO需要把空字符串、空数组、空对象转为None的字段。
+
+        JSON和PostgreSQL数组类型允许空数组/空对象作为有效业务值，不在这里归一化。
+        """
+        empty_value_null_fields = []
+        excluded_db_types = {'json', 'jsonb', 'composite', 'array'}
+        for column in columns or []:
+            data_type = cls.get_db_type(column.column_type).lower()
+            if (
+                column.python_field
+                and not column.required
+                and data_type not in excluded_db_types
+                and not data_type.startswith('_')
+            ):
+                empty_value_null_fields.append(
+                    {
+                        'field_name': column.column_name,
+                        'alias_name': column.python_field,
+                    }
+                )
+        return empty_value_null_fields
 
     @classmethod
     def set_menu_context(cls, context: Dict, gen_table: GenTableModel):
@@ -349,17 +424,23 @@ class TemplateUtils:
                 f'{", ".join(enum_import_names)}'
             )
         for column in columns:
-            if column.python_type in GenConstant.TYPE_DATE:
-                import_list.add(f'from datetime import {column.python_type}')
-            elif column.python_type == GenConstant.TYPE_DECIMAL:
+            vo_python_type = cls.get_vo_python_type(column)
+            if vo_python_type in GenConstant.TYPE_DATE:
+                import_list.add(f'from datetime import {vo_python_type}')
+            elif vo_python_type == GenConstant.TYPE_DECIMAL:
                 import_list.add('from decimal import Decimal')
+            elif vo_python_type == 'UUID':
+                import_list.add('from uuid import UUID')
         if gen_table.sub:
             sub_columns = gen_table.sub_table.columns or []
             for sub_column in sub_columns:
-                if sub_column.python_type in GenConstant.TYPE_DATE:
-                    import_list.add(f'from datetime import {sub_column.python_type}')
-                elif sub_column.python_type == GenConstant.TYPE_DECIMAL:
+                vo_python_type = cls.get_vo_python_type(sub_column)
+                if vo_python_type in GenConstant.TYPE_DATE:
+                    import_list.add(f'from datetime import {vo_python_type}')
+                elif vo_python_type == GenConstant.TYPE_DECIMAL:
                     import_list.add('from decimal import Decimal')
+                elif vo_python_type == 'UUID':
+                    import_list.add('from uuid import UUID')
         return cls.merge_same_imports(list(import_list), 'from datetime import')
 
     @classmethod
@@ -558,7 +639,27 @@ class TemplateUtils:
         enum_info = cls.parse_postgresql_enum_type(column.column_type)
         if enum_info and enum_info.get('enum_labels'):
             return enum_info['enum_class_name']
+        db_type = cls.get_db_type(column.column_type).lower()
+        if db_type in {'json', 'jsonb', 'composite'}:
+            return 'Any'
+        if db_type == 'uuid':
+            return 'UUID'
         return column.python_type
+
+    @classmethod
+    def get_api_python_type(cls, column: GenTableColumnModel) -> str:
+        """
+        获取接口路径参数使用的Python类型。
+
+        这里保持保守：整型主键继续用int，UUID和其它非整型主键用str。
+        """
+        if not column:
+            return 'int'
+        python_type = column.python_type or ''
+        db_type = cls.get_db_type(column.column_type).lower()
+        if python_type == 'int' or db_type in {'int', 'integer', 'smallint', 'bigint', 'serial', 'bigserial'}:
+            return 'int'
+        return 'str'
 
     @classmethod
     def is_enum_column(cls, column: GenTableColumnModel) -> bool:
@@ -763,6 +864,12 @@ class TemplateUtils:
                         )
                     return f"ENUM({enum_class_name}, name='{enum_type_name}', create_type=False)"
                 return f"ENUM(name='{enum_type_name}', create_type=False)"
+            if data_type == 'bit varying':
+                bit_length = column_type_list[1].split(')')[0].strip()
+                return f'BIT({bit_length}, varying=True)' if bit_length.isdigit() else 'BIT(varying=True)'
+            if data_type == 'bit':
+                bit_length = column_type_list[1].split(')')[0].strip()
+                return f'BIT({bit_length})' if bit_length.isdigit() else 'BIT'
             mapped_type = StringUtil.get_mapping_value_by_key_ignore_case(
                 GenConstant.DB_TO_SQLALCHEMY_TYPE_MAPPING, data_type
             )

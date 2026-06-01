@@ -1,11 +1,26 @@
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from module_admin.module_demo.entity.enums.module_demo_enum import DemoStatusEnum
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 from pydantic_validation_decorator import NotBlank
-from typing import Optional
+from typing import Any, Optional
 from module_admin.annotation.pydantic_annotation import as_query
+
+
+def is_empty_generated_value(value):
+    return value == '' or (isinstance(value, (list, dict)) and len(value) == 0)
+
+
+def normalize_empty_generated_values(values, field_alias_map):
+    if not isinstance(values, dict):
+        return values
+    data = values.copy()
+    for field_name, alias_name in field_alias_map.items():
+        for key in {field_name, alias_name}:
+            if key in data and is_empty_generated_value(data.get(key)):
+                data[key] = None
+    return data
 
 
 
@@ -38,9 +53,9 @@ class Module_demoModel(BaseModel):
     datetime_value: Optional[datetime] = Field(default=None, description='日期时间-timestamp without time zone')
     datetime_tz_value: Optional[datetime] = Field(default=None, description='带时区日期时间-timestamp with time zone')
     interval_value: Optional[timedelta] = Field(default=None, description='时间间隔-interval')
-    json_value: Optional[dict] = Field(default=None, description='JSON-json')
-    jsonb_object_value: Optional[dict] = Field(default=None, description='JSON对象-jsonb/object')
-    jsonb_array_value: Optional[dict] = Field(default=None, description='JSON数组-jsonb/array')
+    json_value: Optional[Any] = Field(default=None, description='JSON-json')
+    jsonb_object_value: Optional[Any] = Field(default=None, description='JSON对象-jsonb/object')
+    jsonb_array_value: Optional[Any] = Field(default=None, description='JSON数组-jsonb/array')
     jsonpath_value: Optional[str] = Field(default=None, description='JSON路径-jsonpath')
     binary_value: Optional[bytes] = Field(default=None, description='二进制-bytea')
     enum_value: Optional[DemoStatusEnum] = Field(default=None, description='枚举-enum')
@@ -52,8 +67,8 @@ class Module_demoModel(BaseModel):
     cidr_value: Optional[str] = Field(default=None, description='网络地址-cidr')
     macaddr_value: Optional[str] = Field(default=None, description='MAC地址-macaddr')
     macaddr8_value: Optional[str] = Field(default=None, description='EUI-64 MAC地址-macaddr8')
-    bit_value: Optional[int] = Field(default=None, description='固定长度位-bit')
-    bit_varying_value: Optional[int] = Field(default=None, description='可变长度位-bit varying')
+    bit_value: Optional[str] = Field(default=None, description='固定长度位-bit')
+    bit_varying_value: Optional[str] = Field(default=None, description='可变长度位-bit varying')
     tsvector_value: Optional[str] = Field(default=None, description='全文检索向量-tsvector')
     tsquery_value: Optional[str] = Field(default=None, description='全文检索查询-tsquery')
     int4_range_value: Optional[list] = Field(default=None, description='整数范围-int4range')
@@ -87,6 +102,71 @@ class Module_demoModel(BaseModel):
 
     def validate_fields(self):
         self.get_string_value()
+
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_empty_values(cls, values):
+        return normalize_empty_generated_values(
+            values,
+            {
+                'id': 'id',
+                'fixed_char_value': 'fixedCharValue',
+                'unicode_value': 'unicodeValue',
+                'text_value': 'textValue',
+                'unicode_text_value': 'unicodeTextValue',
+                'small_integer_value': 'smallIntegerValue',
+                'integer_value': 'integerValue',
+                'big_integer_value': 'bigIntegerValue',
+                'numeric_value': 'numericValue',
+                'decimal_value': 'decimalValue',
+                'money_value': 'moneyValue',
+                'float_value': 'floatValue',
+                'real_value': 'realValue',
+                'double_value': 'doubleValue',
+                'boolean_value': 'booleanValue',
+                'date_value': 'dateValue',
+                'time_value': 'timeValue',
+                'time_tz_value': 'timeTzValue',
+                'datetime_value': 'datetimeValue',
+                'datetime_tz_value': 'datetimeTzValue',
+                'interval_value': 'intervalValue',
+                'jsonpath_value': 'jsonpathValue',
+                'binary_value': 'binaryValue',
+                'enum_value': 'enumValue',
+                'uuid_value': 'uuidValue',
+                'inet_value': 'inetValue',
+                'cidr_value': 'cidrValue',
+                'macaddr_value': 'macaddrValue',
+                'macaddr8_value': 'macaddr8Value',
+                'bit_value': 'bitValue',
+                'bit_varying_value': 'bitVaryingValue',
+                'tsvector_value': 'tsvectorValue',
+                'tsquery_value': 'tsqueryValue',
+                'int4_range_value': 'int4RangeValue',
+                'int8_range_value': 'int8RangeValue',
+                'numeric_range_value': 'numericRangeValue',
+                'date_range_value': 'dateRangeValue',
+                'timestamp_range_value': 'timestampRangeValue',
+                'timestamp_tz_range_value': 'timestampTzRangeValue',
+                'int4_multirange_value': 'int4MultirangeValue',
+                'int8_multirange_value': 'int8MultirangeValue',
+                'numeric_multirange_value': 'numericMultirangeValue',
+                'date_multirange_value': 'dateMultirangeValue',
+                'timestamp_multirange_value': 'timestampMultirangeValue',
+                'timestamp_tz_multirange_value': 'timestampTzMultirangeValue',
+                'oid_value': 'oidValue',
+                'regclass_value': 'regclassValue',
+                'regconfig_value': 'regconfigValue',
+                'create_by': 'createBy',
+                'create_time': 'createTime',
+                'update_by': 'updateBy',
+                'update_time': 'updateTime',
+                'remark': 'remark',
+                'description': 'description',
+                'sort_no': 'sortNo',
+                'del_flag': 'delFlag',
+            },
+        )
 
 
 

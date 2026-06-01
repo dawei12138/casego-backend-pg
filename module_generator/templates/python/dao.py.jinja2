@@ -24,13 +24,27 @@ from utils.page_util import PageUtil
 from datetime import datetime, time
 from config.get_db import get_db
 
+{% if backendEmptyValueNullFields or subBackendEmptyValueNullFields %}
+def is_empty_generated_value(value):
+    return value == '' or (isinstance(value, (list, dict)) and len(value) == 0)
+
+
+def normalize_empty_values(data, field_names):
+    normalized = data.copy()
+    for field_name in field_names:
+        if field_name in normalized and is_empty_generated_value(normalized.get(field_name)):
+            normalized[field_name] = None
+    return normalized
+
+
+{% endif %}
 class {{ BusinessName }}Dao:
     """
     {{ functionName }}模块数据库操作层
     """
 
     @classmethod
-    async def get_{{ businessName }}_detail_by_id(cls, db: AsyncSession, {{ pk_field }}: int):
+    async def get_{{ businessName }}_detail_by_id(cls, db: AsyncSession, {{ pk_field }}: {{ pkPythonType }}):
         """
         根据{{ pk_field_comment }}获取{{ functionName }}详细信息
 
@@ -201,7 +215,18 @@ class {{ BusinessName }}Dao:
         :param {{ businessName }}: {{ functionName }}对象
         :return:
         """
-        db_{{ businessName }} = {{ ClassName }}(**{{ businessName }}.model_dump(exclude={% raw %}{{% endraw %}{% if table.sub %}'{{ subclassName }}_list', {% endif %}{% for column in columns %}{% if not column.insert and column.column_name not in column_not_add_show + column_not_edit_show %}'{{ column.python_field | camel_to_snake  }}'{% if not loop.last %}, {% endif %}{% endif %}{% endfor %}{% raw %}}{% endraw %}))
+        payload = {{ businessName }}.model_dump(exclude_none=True, exclude={% raw %}{{% endraw %}{% if table.sub %}'{{ subclassName }}_list', {% endif %}{% for column in columns %}{% if not column.insert and column.column_name not in column_not_add_show + column_not_edit_show %}'{{ column.python_field | camel_to_snake  }}'{% if not loop.last %}, {% endif %}{% endif %}{% endfor %}{% raw %}}{% endraw %})
+        {% if backendEmptyValueNullFields %}
+        payload = normalize_empty_values(
+            payload,
+            {
+                {% for field in backendEmptyValueNullFields %}
+                '{{ field.field_name }}',
+                {% endfor %}
+            },
+        )
+        {% endif %}
+        db_{{ businessName }} = {{ ClassName }}(**payload)
         db.add(db_{{ businessName }})
         await db.flush()
 
@@ -216,6 +241,16 @@ class {{ BusinessName }}Dao:
         :param {{ businessName }}: 需要更新的{{ functionName }}字典
         :return:
         """
+        {% if backendEmptyValueNullFields %}
+        {{ businessName }} = normalize_empty_values(
+            {{ businessName }},
+            {
+                {% for field in backendEmptyValueNullFields %}
+                '{{ field.field_name }}',
+                {% endfor %}
+            },
+        )
+        {% endif %}
         await db.execute(update({{ ClassName }}), [{{ businessName }}])
 
     @classmethod
@@ -262,7 +297,18 @@ if __name__ == '__main__':
         :param {{ subTable.business_name }}: {{ subTable.function_name }}对象
         :return:
         """
-        db_{{ subTable.business_name }} = {{ subClassName }}(**{{ subTable.business_name }}.model_dump())
+        payload = {{ subTable.business_name }}.model_dump(exclude_none=True)
+        {% if subBackendEmptyValueNullFields %}
+        payload = normalize_empty_values(
+            payload,
+            {
+                {% for field in subBackendEmptyValueNullFields %}
+                '{{ field.field_name }}',
+                {% endfor %}
+            },
+        )
+        {% endif %}
+        db_{{ subTable.business_name }} = {{ subClassName }}(**payload)
         db.add(db_{{ subTable.business_name }})
         await db.flush()
 
@@ -277,6 +323,16 @@ if __name__ == '__main__':
         :param {{ subTable.business_name }}: 需要更新的{{ subTable.function_name }}字典
         :return:
         """
+        {% if subBackendEmptyValueNullFields %}
+        {{ subTable.business_name }} = normalize_empty_values(
+            {{ subTable.business_name }},
+            {
+                {% for field in subBackendEmptyValueNullFields %}
+                '{{ field.field_name }}',
+                {% endfor %}
+            },
+        )
+        {% endif %}
         await db.execute(update({{ subClassName }}), [{{ subTable.business_name }}])
 
     @classmethod

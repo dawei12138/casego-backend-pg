@@ -40,6 +40,7 @@ class Module_demoService:
         :param page_object: 新增Demo全类型测试对象
         :return: 新增Demo全类型测试校验结果
         """
+        page_object = Module_demoModel.model_validate(page_object.model_dump())
         try:
             await Module_demoDao.add_module_demo_dao(query_db, page_object)
             await query_db.commit()
@@ -57,6 +58,7 @@ class Module_demoService:
         :param page_object: 编辑Demo全类型测试对象
         :return: 编辑Demo全类型测试校验结果
         """
+        page_object = Module_demoModel.model_validate(page_object.model_dump())
         edit_module_demo = page_object.model_dump(exclude_unset=True, exclude={'create_by', 'create_time', 'del_flag'})
         module_demo_info = await cls.module_demo_detail_services(query_db, page_object.id)
         if module_demo_info.id:

@@ -71,6 +71,9 @@ class {{ BusinessName }}Service:
         :param page_object: 新增{{ functionName }}对象
         :return: 新增{{ functionName }}校验结果
         """
+        {% if backendEmptyValueNullFields %}
+        page_object = {{ BusinessName }}Model.model_validate(page_object.model_dump())
+        {% endif %}
         {% for column in columns %}
         {% set parentheseIndex = column.column_comment.find("（") %}
         {% set comment = column.column_comment[:parentheseIndex] if parentheseIndex != -1 else column.column_comment %}
@@ -103,6 +106,9 @@ class {{ BusinessName }}Service:
         :param page_object: 编辑{{ functionName }}对象
         :return: 编辑{{ functionName }}校验结果
         """
+        {% if backendEmptyValueNullFields %}
+        page_object = {{ BusinessName }}Model.model_validate(page_object.model_dump())
+        {% endif %}
         edit_{{ businessName }} = page_object.model_dump(exclude_unset=True, exclude={% raw %}{{% endraw %}{% if table.sub %}'{{ subclassName }}_list', {% endif %}{% for column in columns %}{% if not column.edit and not column.pk and column.column_name not in column_not_edit_show %}'{{ column.python_field | camel_to_snake  }}'{% if not loop.last %}, {% endif %}{% endif %}{% endfor %}{% raw %}}{% endraw %})
         {{ businessName }}_info = await cls.{{ businessName }}_detail_services(query_db, page_object.{{ pk_field }})
         if {{ businessName }}_info.{{ pk_field }}:
@@ -143,14 +149,12 @@ class {{ BusinessName }}Service:
             {{ pk_field }}_list = page_object.{{ pk_field }}s.split(',')
             try:
                 for {{ pk_field }} in {{ pk_field }}_list:
-                    # {{ pk_field }}_int = int({{ pk_field }})
+                    {{ pk_field }}_obj = {{ BusinessName }}Model.model_validate({'{{ pk_field }}': {{ pk_field }}}).{{ pk_field }}
                     {% if table.sub %}
-                    {{ businessName }} = await cls.{{ businessName }}_detail_services(query_db, int({{ pk_field }}))
+                    {{ businessName }} = await cls.{{ businessName }}_detail_services(query_db, {{ pk_field }}_obj)
                     for sub_table in {{ businessName }}.{{ subclassName }}_list:
                         await {{ BusinessName }}Dao.delete_{{ subTable.business_name }}_dao(query_db, sub_table)
                     {% endif %}
-                    {{ pk_field }}_obj = {{ BusinessName }}Model.model_validate({'{{ pk_field }}': {{ pk_field }}}).{{ pk_field }}
-                    # await {{ BusinessName }}Dao.delete_{{ businessName }}_dao(query_db, {{ BusinessName }}Model({{ pkField }}={{ pk_field }}_int))
                     await {{ BusinessName }}Dao.delete_{{ businessName }}_dao(query_db, {{ BusinessName }}Model({{ pkField }}={{ pk_field }}_obj))
                 await query_db.commit()
                 return CrudResponseModel(is_success=True, message='删除成功')
@@ -161,7 +165,7 @@ class {{ BusinessName }}Service:
             raise ServiceException(message='传入{{ pk_field_comment }}为空')
 
     @classmethod
-    async def {{ businessName }}_detail_services(cls, query_db: AsyncSession, {{ pk_field }}: int):
+    async def {{ businessName }}_detail_services(cls, query_db: AsyncSession, {{ pk_field }}: {{ pkPythonType }}):
         """
         获取{{ functionName }}详细信息service
 

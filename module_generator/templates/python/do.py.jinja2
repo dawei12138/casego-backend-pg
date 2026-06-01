@@ -1,3 +1,20 @@
+{% set uuid_pk_default = namespace(has_uuid_pk=False) %}
+{% for column in columns %}
+{% if column.pk and column.column_type and column.column_type | lower == 'uuid' %}
+{% set uuid_pk_default.has_uuid_pk = True %}
+{% endif %}
+{% endfor %}
+{% if table.sub %}
+{% for column in subTable.columns %}
+{% if column.pk and column.column_type and column.column_type | lower == 'uuid' %}
+{% set uuid_pk_default.has_uuid_pk = True %}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% if uuid_pk_default.has_uuid_pk %}
+import uuid
+
+{% endif %}
 {% for do_import in doImportList %}
 {{ do_import }}
 {% endfor %}
@@ -16,7 +33,7 @@ class {{ ClassName }}(Base):
     __table_args__ = {'comment': '{{ functionName }}表'}
 
     {% for column in columns %}
-    {{ column.column_name }} = Column({{ column.column_type | get_sqlalchemy_type }}{% if column.pk %}, primary_key=True{% endif %}{% if column.increment %}, autoincrement=True{% endif %}{% if column.required or column.pk %}, nullable=False{% else %}, nullable=True{% endif %}{% if column.column_name == 'del_flag' %}, default=0{% endif %}, comment='{{ column.column_comment }}')
+    {{ column.column_name }} = Column({{ column.column_type | get_sqlalchemy_type }}{% if column.pk %}, primary_key=True{% endif %}{% if column.increment %}, autoincrement=True{% endif %}{% if column.required or column.pk %}, nullable=False{% else %}, nullable=True{% endif %}{% if column.pk and column.column_type and column.column_type | lower == 'uuid' %}, default=uuid.uuid4{% endif %}{% if column.column_name == 'del_flag' %}, default='0'{% endif %}, comment='{{ column.column_comment }}')
     {% endfor %}
 
 
@@ -34,7 +51,7 @@ class {{ subClassName }}(Base):
     __tablename__ = '{{ subTableName }}'
 
     {% for column in subTable.columns %}
-    {{ column.column_name }} = Column({{ column.column_type | get_sqlalchemy_type }}, {% if column.column_name == subTableFkName %}ForeignKey('{{ tableName }}.{{ subTableFkName }}'), {% endif %}{% if column.pk %}primary_key=True, {% endif %}{% if column.increment %}autoincrement=True, {% endif %}{% if column.required %}nullable=True{% else %}nullable=False{% endif %}, comment='{{ column.column_comment }}')
+    {{ column.column_name }} = Column({{ column.column_type | get_sqlalchemy_type }}, {% if column.column_name == subTableFkName %}ForeignKey('{{ tableName }}.{{ subTableFkName }}'), {% endif %}{% if column.pk %}primary_key=True, {% endif %}{% if column.increment %}autoincrement=True, {% endif %}{% if column.required %}nullable=True{% else %}nullable=False{% endif %}{% if column.pk and column.column_type and column.column_type | lower == 'uuid' %}, default=uuid.uuid4{% endif %}, comment='{{ column.column_comment }}')
     {% endfor %}
 
     {% if table.sub %}

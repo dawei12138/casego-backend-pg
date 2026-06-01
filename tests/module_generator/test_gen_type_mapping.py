@@ -1,6 +1,7 @@
 import sys
-from sqlalchemy import Column, MetaData, Table, insert
-from sqlalchemy.dialects.postgresql import ENUM
+import uuid
+from sqlalchemy import Column, DateTime, MetaData, Table, Time, insert
+from sqlalchemy.dialects.postgresql import BIT, ENUM
 from sqlalchemy.dialects.postgresql.asyncpg import PGDialect_asyncpg
 
 _original_argv = sys.argv[:]
@@ -24,6 +25,8 @@ def test_postgresql_internal_aliases_initialize_generator_column_types():
         ('regconfig_value', 'regconfig', 'str'),
         ('jsonpath_value', 'jsonpath', 'str'),
         ('fixed_char_value', 'char(1)', 'str'),
+        ('bit_value', 'bit', 'str'),
+        ('bit_varying_value', 'bit varying', 'str'),
     ]
 
     for column_name, column_type, python_type in cases:
@@ -98,6 +101,37 @@ def test_postgresql_dialect_types_generate_valid_do_imports_and_type_expressions
     assert TemplateUtils.get_sqlalchemy_type('char(1)') == 'CHAR(1)'
     assert 'from sqlalchemy import Column, String' in imports
     assert 'from sqlalchemy.dialects.postgresql import ARRAY, INET, JSONB, JSONPATH, OID, REGCLASS, REGCONFIG' in imports
+
+
+def test_postgresql_insert_bind_casts_match_timezone_and_bit_types():
+    cases = [
+        ('time_tz_value', 'time with time zone', 'Time(timezone=True)', '$1::TIME WITH TIME ZONE'),
+        ('timetz_value', 'timetz', 'Time(timezone=True)', '$1::TIME WITH TIME ZONE'),
+        (
+            'datetime_tz_value',
+            'timestamp with time zone',
+            'DateTime(timezone=True)',
+            '$1::TIMESTAMP WITH TIME ZONE',
+        ),
+        ('timestamptz_value', 'timestamptz', 'DateTime(timezone=True)', '$1::TIMESTAMP WITH TIME ZONE'),
+        ('bit_varying_value', 'bit varying', 'BIT(varying=True)', '$1::BIT VARYING'),
+        ('bit_varying_value', 'bit varying(16)', 'BIT(16, varying=True)', '$1::BIT VARYING(16)'),
+    ]
+
+    for column_name, column_type, expected_type, expected_cast in cases:
+        sqlalchemy_type = TemplateUtils.get_sqlalchemy_type(column_type)
+        table = Table(
+            'module_demo_all_types',
+            MetaData(),
+            Column(column_name, eval(sqlalchemy_type, {'Time': Time, 'DateTime': DateTime, 'BIT': BIT})),
+        )
+        compiled = insert(table).values({column_name: None}).compile(dialect=PGDialect_asyncpg())
+
+        assert sqlalchemy_type == expected_type
+        assert expected_cast in str(compiled)
+
+    assert TemplateUtils.get_sqlalchemy_type('_timetz') == 'ARRAY(Time(timezone=True))'
+    assert TemplateUtils.get_sqlalchemy_type('_timestamptz') == 'ARRAY(DateTime(timezone=True))'
 
 
 def test_postgresql_enum_type_generates_enum_cast_for_asyncpg():
@@ -287,6 +321,30 @@ def test_vue_template_renders_type_specific_components_and_payload_transforms():
                 isList='1',
                 isQuery='1',
             ),
+            GenTableColumnModel(
+                columnName='jsonpath_value',
+                columnType='jsonpath',
+                pythonField='jsonpathValue',
+                pythonType='str',
+                htmlType='',
+                columnComment='JSON路径-jsonpath',
+                isInsert='1',
+                isEdit='1',
+                isList='1',
+                isQuery='1',
+            ),
+            GenTableColumnModel(
+                columnName='bit_value',
+                columnType='bit',
+                pythonField='bitValue',
+                pythonType='str',
+                htmlType='',
+                columnComment='固定长度位-bit',
+                isInsert='1',
+                isEdit='1',
+                isList='1',
+                isQuery='1',
+            ),
         ],
     )
     table.pk_column = table.columns[0]
@@ -304,7 +362,9 @@ def test_vue_template_renders_type_specific_components_and_payload_transforms():
     assert 'formatTableValue(scope.row.jsonValue)' in source
     assert "const jsonFields = ['jsonValue', 'stringArrayValue']" in source
     assert "const binaryFields = ['binaryValue']" in source
+    assert "const emptyStringNullFields = ['jsonValue', 'stringArrayValue', 'binaryValue', 'jsonpathValue', 'bitValue']" in source
     assert 'normalizeGeneratedPayload' in source
+    assert 'emptyStringNullFields.forEach(field => {' in source
 
 
 def test_vo_template_derives_missing_python_types_from_column_types():
@@ -367,3 +427,405 @@ def test_vo_template_derives_missing_python_types_from_column_types():
     assert 'Optional[]' not in source
     assert 'from datetime import timedelta' in source
     compile(source, '<generated-vo>', 'exec')
+
+
+def test_vo_template_allows_json_fields_to_receive_objects_and_arrays():
+    table = GenTableModel(
+        tableName='module_demo_all_types',
+        tableComment='Demo全类型测试表',
+        className='ModuleDemoAllTypes',
+        packageName='module_admin.module_demo',
+        moduleName='module_demo',
+        businessName='module_demo',
+        functionName='Demo全类型测试',
+        functionAuthor='tester',
+        tplCategory='crud',
+        tplWebType='element-plus',
+        options='{}',
+        columns=[
+            GenTableColumnModel(
+                columnName='id',
+                columnType='bigint',
+                pythonField='id',
+                pythonType='int',
+                columnComment='主键ID-bigint',
+                isPk='1',
+            ),
+            GenTableColumnModel(
+                columnName='json_value',
+                columnType='json',
+                pythonField='jsonValue',
+                pythonType='dict',
+                columnComment='JSON-json',
+            ),
+            GenTableColumnModel(
+                columnName='jsonb_object_value',
+                columnType='jsonb',
+                pythonField='jsonbObjectValue',
+                pythonType='dict',
+                columnComment='JSON对象-jsonb/object',
+            ),
+            GenTableColumnModel(
+                columnName='jsonb_array_value',
+                columnType='jsonb',
+                pythonField='jsonbArrayValue',
+                pythonType='dict',
+                columnComment='JSON数组-jsonb/array',
+            ),
+        ],
+    )
+    table.pk_column = table.columns[0]
+
+    context = TemplateUtils.prepare_context(table)
+    source = TemplateInitializer.init_jinja2().get_template('python/vo.py.jinja2').render(**context)
+    namespace = {}
+
+    exec(source, namespace)
+    model = namespace['Module_demoModel'].model_validate(
+        {
+            'jsonValue': [],
+            'jsonbObjectValue': {'enabled': True},
+            'jsonbArrayValue': [{'id': 1}],
+        }
+    )
+
+    assert 'json_value: Optional[Any]' in source
+    assert model.json_value == []
+    assert model.jsonb_object_value == {'enabled': True}
+    assert model.jsonb_array_value == [{'id': 1}]
+
+
+def test_do_template_uses_string_default_for_del_flag():
+    table = GenTableModel(
+        tableName='module_demo_all_types',
+        tableComment='Demo全类型测试表',
+        className='ModuleDemoAllTypes',
+        packageName='module_admin.module_demo',
+        moduleName='module_demo',
+        businessName='module_demo',
+        functionName='Demo全类型测试',
+        functionAuthor='tester',
+        tplCategory='crud',
+        tplWebType='element-plus',
+        options='{}',
+        columns=[
+            GenTableColumnModel(
+                columnName='id',
+                columnType='bigint',
+                pythonField='id',
+                pythonType='int',
+                columnComment='主键ID-bigint',
+                isPk='1',
+            ),
+            GenTableColumnModel(
+                columnName='del_flag',
+                columnType='varchar(1)',
+                pythonField='delFlag',
+                pythonType='str',
+                columnComment='删除标志',
+            ),
+        ],
+    )
+    table.pk_column = table.columns[0]
+
+    context = TemplateUtils.prepare_context(table)
+    source = TemplateInitializer.init_jinja2().get_template('python/do.py.jinja2').render(**context)
+
+    assert "del_flag = Column(String(1), nullable=True, default='0', comment='删除标志')" in source
+    assert "default=0" not in source
+    compile(source, '<generated-do>', 'exec')
+
+
+def test_uuid_primary_key_generates_python_default_and_string_route_types():
+    table = GenTableModel(
+        tableName='module_uuid_demo_test',
+        tableComment='UUID主键业务示例表',
+        className='ModuleUuidDemoTest',
+        packageName='module_admin.module_demo.module_uuid_demo',
+        moduleName='uuid_demo',
+        businessName='module_uuid_demo',
+        functionName='UUID主键业务示例',
+        functionAuthor='tester',
+        tplCategory='crud',
+        tplWebType='element-plus',
+        options='{}',
+        columns=[
+            GenTableColumnModel(
+                columnName='id',
+                columnType='uuid',
+                pythonField='id',
+                pythonType='str',
+                columnComment='主键ID-uuid',
+                isPk='1',
+            ),
+            GenTableColumnModel(
+                columnName='title',
+                columnType='varchar(100)',
+                pythonField='title',
+                pythonType='str',
+                columnComment='业务标题',
+                isInsert='1',
+                isRequired='1',
+            ),
+        ],
+    )
+    table.pk_column = table.columns[0]
+
+    context = TemplateUtils.prepare_context(table)
+    env = TemplateInitializer.init_jinja2()
+    do_source = env.get_template('python/do.py.jinja2').render(**context)
+    controller_source = env.get_template('python/controller.py.jinja2').render(**context)
+    dao_source = env.get_template('python/dao.py.jinja2').render(**context)
+    service_source = env.get_template('python/service.py.jinja2').render(**context)
+
+    assert 'import uuid' in do_source
+    assert "id = Column(Uuid, primary_key=True, nullable=False, default=uuid.uuid4, comment='主键ID-uuid')" in do_source
+    assert 'async def query_detail_uuid_demo_module_uuid_demo(request: Request, id: str,' in controller_source
+    assert 'async def get_module_uuid_demo_detail_by_id(cls, db: AsyncSession, id: str):' in dao_source
+    assert 'async def module_uuid_demo_detail_services(cls, query_db: AsyncSession, id: str):' in service_source
+    assert 'int(id)' not in service_source
+    compile(do_source, '<generated-do>', 'exec')
+    compile(controller_source, '<generated-controller>', 'exec')
+    compile(dao_source, '<generated-dao>', 'exec')
+    compile(service_source, '<generated-service>', 'exec')
+
+
+def test_uuid_columns_generate_uuid_vo_type_and_accept_database_uuid_values():
+    table = GenTableModel(
+        tableName='module_uuid_demo_test',
+        tableComment='UUID主键业务示例表',
+        className='ModuleUuidDemoTest',
+        packageName='module_admin.module_demo.module_uuid_demo',
+        moduleName='uuid_demo',
+        businessName='module_uuid_demo',
+        functionName='UUID主键业务示例',
+        functionAuthor='tester',
+        tplCategory='crud',
+        tplWebType='element-plus',
+        options='{}',
+        columns=[
+            GenTableColumnModel(
+                columnName='id',
+                columnType='uuid',
+                pythonField='id',
+                pythonType='str',
+                columnComment='主键ID-uuid',
+                isPk='1',
+            ),
+            GenTableColumnModel(
+                columnName='title',
+                columnType='varchar(100)',
+                pythonField='title',
+                pythonType='str',
+                columnComment='业务标题',
+            ),
+        ],
+    )
+    table.pk_column = table.columns[0]
+
+    context = TemplateUtils.prepare_context(table)
+    source = TemplateInitializer.init_jinja2().get_template('python/vo.py.jinja2').render(**context)
+    namespace = {}
+    database_id = uuid.uuid4()
+
+    exec(source, namespace)
+    model = namespace['Module_uuid_demoModel'].model_validate({'id': database_id, 'title': '编辑详情'})
+
+    assert 'from uuid import UUID' in source
+    assert 'id: Optional[UUID]' in source
+    assert model.id == database_id
+    assert model.model_dump(mode='json', by_alias=True)['id'] == str(database_id)
+    compile(source, '<generated-vo>', 'exec')
+
+
+def test_dao_add_template_omits_none_values_on_insert():
+    table = GenTableModel(
+        tableName='module_demo_all_types',
+        tableComment='Demo全类型测试表',
+        className='ModuleDemoAllTypes',
+        packageName='module_admin.module_demo',
+        moduleName='module_demo',
+        businessName='module_demo',
+        functionName='Demo全类型测试',
+        functionAuthor='tester',
+        tplCategory='crud',
+        tplWebType='element-plus',
+        options='{}',
+        columns=[
+            GenTableColumnModel(
+                columnName='id',
+                columnType='bigint',
+                pythonField='id',
+                pythonType='int',
+                columnComment='主键ID-bigint',
+                isPk='1',
+            ),
+            GenTableColumnModel(
+                columnName='string_value',
+                columnType='varchar(100)',
+                pythonField='stringValue',
+                pythonType='str',
+                columnComment='字符串-varchar',
+                isInsert='1',
+            ),
+            GenTableColumnModel(
+                columnName='time_tz_value',
+                columnType='time with time zone',
+                pythonField='timeTzValue',
+                pythonType='time',
+                columnComment='带时区时间-time with time zone',
+                isInsert='1',
+            ),
+        ],
+    )
+    table.pk_column = table.columns[0]
+
+    context = TemplateUtils.prepare_context(table)
+    source = TemplateInitializer.init_jinja2().get_template('python/dao.py.jinja2').render(**context)
+
+    assert 'model_dump(exclude_none=True, exclude={' in source
+    compile(source, '<generated-dao>', 'exec')
+
+
+def test_generated_code_normalizes_empty_containers_for_scalar_fields_before_insert():
+    table = GenTableModel(
+        tableName='module_demo_all_types',
+        tableComment='Demo全类型测试表',
+        className='ModuleDemoAllTypes',
+        packageName='module_admin.module_demo',
+        moduleName='module_demo',
+        businessName='module_demo',
+        functionName='Demo全类型测试',
+        functionAuthor='tester',
+        tplCategory='crud',
+        tplWebType='element-plus',
+        options='{}',
+        columns=[
+            GenTableColumnModel(
+                columnName='id',
+                columnType='bigint',
+                pythonField='id',
+                pythonType='int',
+                columnComment='主键ID-bigint',
+                isPk='1',
+            ),
+            GenTableColumnModel(
+                columnName='string_value',
+                columnType='varchar(100)',
+                pythonField='stringValue',
+                pythonType='str',
+                columnComment='字符串-varchar',
+                isInsert='1',
+                isRequired='1',
+            ),
+            GenTableColumnModel(
+                columnName='jsonpath_value',
+                columnType='jsonpath',
+                pythonField='jsonpathValue',
+                pythonType='str',
+                htmlType='',
+                columnComment='JSON路径-jsonpath',
+                isInsert='1',
+            ),
+            GenTableColumnModel(
+                columnName='bit_value',
+                columnType='bit',
+                pythonField='bitValue',
+                pythonType='str',
+                htmlType='',
+                columnComment='固定长度位-bit',
+                isInsert='1',
+            ),
+            GenTableColumnModel(
+                columnName='string_array_value',
+                columnType='_varchar',
+                pythonField='stringArrayValue',
+                pythonType='list',
+                htmlType='',
+                columnComment='字符串数组-array/varchar',
+                isInsert='1',
+            ),
+        ],
+    )
+    table.pk_column = table.columns[0]
+
+    context = TemplateUtils.prepare_context(table)
+    env = TemplateInitializer.init_jinja2()
+    vo_source = env.get_template('python/vo.py.jinja2').render(**context)
+    dao_source = env.get_template('python/dao.py.jinja2').render(**context)
+    vue_source = env.get_template('vue/v3/index.vue.jinja2').render(**context)
+
+    namespace = {}
+    exec(vo_source, namespace)
+    model = namespace['Module_demoModel'].model_validate(
+        {
+            'stringValue': 'demo',
+            'jsonpathValue': [],
+            'bitValue': {},
+            'stringArrayValue': [],
+        }
+    )
+
+    assert model.jsonpath_value is None
+    assert model.bit_value is None
+    assert model.string_array_value == []
+    assert '@model_validator(mode=\'before\')' in vo_source
+    assert "'jsonpath_value': 'jsonpathValue'" in vo_source
+    assert "'bit_value': 'bitValue'" in vo_source
+    assert "'string_array_value': 'stringArrayValue'" not in vo_source
+    assert 'normalize_empty_values(' in dao_source
+    assert "'jsonpath_value'" in dao_source
+    assert "'bit_value'" in dao_source
+    assert "'string_array_value'" not in dao_source
+    assert 'isEmptyGeneratedValue(payload[field])' in vue_source
+
+
+def test_service_template_revalidates_payload_to_apply_generated_empty_value_normalization():
+    table = GenTableModel(
+        tableName='module_demo_all_types',
+        tableComment='Demo全类型测试表',
+        className='ModuleDemoAllTypes',
+        packageName='module_admin.module_demo',
+        moduleName='module_demo',
+        businessName='module_demo',
+        functionName='Demo全类型测试',
+        functionAuthor='tester',
+        tplCategory='crud',
+        tplWebType='element-plus',
+        options='{}',
+        columns=[
+            GenTableColumnModel(
+                columnName='id',
+                columnType='bigint',
+                pythonField='id',
+                pythonType='int',
+                columnComment='主键ID-bigint',
+                isPk='1',
+            ),
+            GenTableColumnModel(
+                columnName='string_value',
+                columnType='varchar(100)',
+                pythonField='stringValue',
+                pythonType='str',
+                columnComment='字符串-varchar',
+                isInsert='1',
+                isRequired='1',
+            ),
+            GenTableColumnModel(
+                columnName='jsonpath_value',
+                columnType='jsonpath',
+                pythonField='jsonpathValue',
+                pythonType='str',
+                columnComment='JSON路径-jsonpath',
+                isInsert='1',
+                isEdit='1',
+            ),
+        ],
+    )
+    table.pk_column = table.columns[0]
+
+    context = TemplateUtils.prepare_context(table)
+    service_source = TemplateInitializer.init_jinja2().get_template('python/service.py.jinja2').render(**context)
+
+    assert 'page_object = Module_demoModel.model_validate(page_object.model_dump())' in service_source
+    compile(service_source, '<generated-service>', 'exec')

@@ -533,6 +533,8 @@ const total = ref(0);
 const title = ref("");
 const jsonFields = [{% for field in frontendJsonFields %}'{{ field }}'{% if not loop.last %}, {% endif %}{% endfor %}];
 const binaryFields = [{% for field in frontendBinaryFields %}'{{ field }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+const emptyStringNullFields = [{% for field in frontendEmptyStringNullFields %}'{{ field }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+const emptyContainerNullFields = [{% for field in frontendEmptyContainerNullFields %}'{{ field }}'{% if not loop.last %}, {% endif %}{% endfor %}];
 {% for column in columns %}
 {% if (column.html_type == "date" or column.html_type == "datetime" or column.html_type == "datetimeTz") and column.query_type == "BETWEEN" %}
 {% set AttrName = column.python_field[0] | upper + column.python_field[1:] %}
@@ -677,8 +679,23 @@ function stringifyGeneratedFields(row) {
   return data;
 }
 
+function isEmptyGeneratedValue(value) {
+  return value === "" || (Array.isArray(value) && value.length === 0)
+    || (value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0);
+}
+
 function normalizeGeneratedPayload(source) {
   const payload = { ...(source || {}) };
+  emptyStringNullFields.forEach(field => {
+    if (payload[field] === "") {
+      payload[field] = null;
+    }
+  });
+  emptyContainerNullFields.forEach(field => {
+    if (isEmptyGeneratedValue(payload[field])) {
+      payload[field] = null;
+    }
+  });
   jsonFields.forEach(field => {
     if (payload[field] === "" || payload[field] === null || payload[field] === undefined) {
       payload[field] = null;

@@ -41,6 +41,7 @@ from module_admin.api_workflow.api_worknode_executions.controller.worknode_execu
 from module_admin.api_workflow.api_worknodes.controller.worknodes_controller import worknodesController
 from module_admin.api_workflow.workflow.controller.workflow_controller import workflowController
 from module_admin.module_demo.controller.module_demo_controller import module_demoController
+from module_admin.module_demo.module_uuid_demo.controller.module_uuid_demo_controller import module_uuid_demoController
 from module_admin.system.notification.controller.notification_controller import notificationController
 from module_admin.websocket.controller.websocket_controller import websocketController
 
@@ -229,6 +230,7 @@ controller_list = [
     {'router': mcpconfigController, 'tags': ['AImcp服务配置']},
     {'router': skillController, 'tags': ['AI技能管理']},
     {'router': module_demoController, 'tags': ['测试所有类型']},
+    {'router': module_uuid_demoController, 'tags': ['测试uuid']},
 ]
 
 for controller in controller_list:

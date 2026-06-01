@@ -30,9 +30,9 @@ class ModuleDemoAllTypes(Base):
     boolean_value = Column(Boolean, nullable=True, comment='布尔-boolean')
     date_value = Column(Date, nullable=True, comment='日期-date')
     time_value = Column(Time, nullable=True, comment='时间-time without time zone')
-    time_tz_value = Column(Time, nullable=True, comment='带时区时间-time with time zone')
+    time_tz_value = Column(Time(timezone=True), nullable=True, comment='带时区时间-time with time zone')
     datetime_value = Column(DateTime, nullable=True, comment='日期时间-timestamp without time zone')
-    datetime_tz_value = Column(DateTime, nullable=True, comment='带时区日期时间-timestamp with time zone')
+    datetime_tz_value = Column(DateTime(timezone=True), nullable=True, comment='带时区日期时间-timestamp with time zone')
     interval_value = Column(Interval, nullable=True, comment='时间间隔-interval')
     json_value = Column(JSON, nullable=True, comment='JSON-json')
     jsonb_object_value = Column(JSONB, nullable=True, comment='JSON对象-jsonb/object')
@@ -49,7 +49,7 @@ class ModuleDemoAllTypes(Base):
     macaddr_value = Column(MACADDR, nullable=True, comment='MAC地址-macaddr')
     macaddr8_value = Column(MACADDR8, nullable=True, comment='EUI-64 MAC地址-macaddr8')
     bit_value = Column(BIT, nullable=True, comment='固定长度位-bit')
-    bit_varying_value = Column(BIT, nullable=True, comment='可变长度位-bit varying')
+    bit_varying_value = Column(BIT(varying=True), nullable=True, comment='可变长度位-bit varying')
     tsvector_value = Column(TSVECTOR, nullable=True, comment='全文检索向量-tsvector')
     tsquery_value = Column(TSQUERY, nullable=True, comment='全文检索查询-tsquery')
     int4_range_value = Column(INT4RANGE, nullable=True, comment='整数范围-int4range')
@@ -74,7 +74,7 @@ class ModuleDemoAllTypes(Base):
     remark = Column(String(500), nullable=True, comment='')
     description = Column(Text, nullable=True, comment='')
     sort_no = Column(Float, nullable=True, comment='')
-    del_flag = Column(String(1), nullable=True, default=0, comment='')
+    del_flag = Column(String(1), nullable=True, default='0', comment='')
 
 
 

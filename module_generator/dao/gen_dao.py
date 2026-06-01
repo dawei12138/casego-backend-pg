@@ -115,6 +115,11 @@ class GenTableDao:
                 if query_object.begin_time and query_object.end_time
                 else True,
             )
+            .order_by(
+                GenTable.update_time.desc().nulls_last(),
+                GenTable.create_time.desc().nulls_last(),
+                GenTable.table_id.desc(),
+            )
             #.distinct()
         )
         gen_table_list = await PageUtil.paginate(db, query, query_object.page_num, query_object.page_size, is_page)

@@ -4,6 +4,7 @@
 {% set pk_field_comment = pkColumn.column_comment[:pkParentheseIndex] if pkParentheseIndex != -1 else pkColumn.column_comment %}
 {% set vo_field_required = namespace(has_required=False) %}
 {% set vo_field_daterange = namespace(has_daterange=False) %}
+{% set vo_field_any = namespace(has_any=False) %}
 {% for column in columns %}
 {% if column.required %}
     {% set vo_field_required.has_required = True %}
@@ -11,31 +12,59 @@
 {% if column.html_type == "datetime" and column.query_type == "BETWEEN" %}
     {% set vo_field_daterange.has_daterange = True %}
 {% endif %}
+{% if column | get_vo_python_type == "Any" %}
+    {% set vo_field_any.has_any = True %}
+{% endif %}
 {% endfor %}
 {% set sub_vo_field_required = namespace(has_required=False) %}
+{% set sub_vo_field_any = namespace(has_any=False) %}
 {% if table.sub %}
 {% for sub_column in subTable.columns %}
 {% if sub_column.required %}
     {% set sub_vo_field_required.has_required = True %}
+{% endif %}
+{% if sub_column | get_vo_python_type == "Any" %}
+    {% set sub_vo_field_any.has_any = True %}
 {% endif %}
 {% endfor %}
 {% endif %}
 {% for vo_import in voImportList %}
 {{ vo_import }}
 {% endfor %}
+{% if backendEmptyValueNullFields or subBackendEmptyValueNullFields %}
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+{% else %}
 from pydantic import BaseModel, ConfigDict, Field
+{% endif %}
 from pydantic.alias_generators import to_camel
 {% if vo_field_required.has_required or sub_vo_field_required.has_required %}
 from pydantic_validation_decorator import NotBlank
 {% endif %}
 {% if table.sub %}
-from typing import List, Optional
+from typing import {% if vo_field_any.has_any or sub_vo_field_any.has_any %}Any, {% endif %}List, Optional
 {% else %}
-from typing import Optional
+from typing import {% if vo_field_any.has_any %}Any, {% endif %}Optional
 {% endif %}
 from module_admin.annotation.pydantic_annotation import as_query
 
 
+{% if backendEmptyValueNullFields or subBackendEmptyValueNullFields %}
+def is_empty_generated_value(value):
+    return value == '' or (isinstance(value, (list, dict)) and len(value) == 0)
+
+
+def normalize_empty_generated_values(values, field_alias_map):
+    if not isinstance(values, dict):
+        return values
+    data = values.copy()
+    for field_name, alias_name in field_alias_map.items():
+        for key in {field_name, alias_name}:
+            if key in data and is_empty_generated_value(data.get(key)):
+                data[key] = None
+    return data
+
+
+{% endif %}
 {% if table.sub %}
 class {{ BusinessName }}BaseModel(BaseModel):
     """
@@ -66,6 +95,20 @@ class {{ BusinessName }}BaseModel(BaseModel):
         self.get_{{ column.column_name }}()
     {% endif %}
     {% endfor %}
+    {% endif %}
+
+    {% if backendEmptyValueNullFields %}
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_empty_values(cls, values):
+        return normalize_empty_generated_values(
+            values,
+            {
+                {% for field in backendEmptyValueNullFields %}
+                '{{ field.field_name }}': '{{ field.alias_name }}',
+                {% endfor %}
+            },
+        )
     {% endif %}
 {% endif %}
 
@@ -105,6 +148,20 @@ class {{ BusinessName }}Model({% if table.sub %}{{ BusinessName }}BaseModel{% el
     {% endif %}
     {% endfor %}
     {% endif %}
+
+    {% if backendEmptyValueNullFields %}
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_empty_values(cls, values):
+        return normalize_empty_generated_values(
+            values,
+            {
+                {% for field in backendEmptyValueNullFields %}
+                '{{ field.field_name }}': '{{ field.alias_name }}',
+                {% endfor %}
+            },
+        )
+    {% endif %}
     {% endif %}
 
 
@@ -138,6 +195,20 @@ class {{ subTable.business_name | capitalize }}Model(BaseModel):
         self.get_{{ sub_column.column_name }}()
     {% endif %}
     {% endfor %}
+    {% endif %}
+
+    {% if subBackendEmptyValueNullFields %}
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_empty_values(cls, values):
+        return normalize_empty_generated_values(
+            values,
+            {
+                {% for field in subBackendEmptyValueNullFields %}
+                '{{ field.field_name }}': '{{ field.alias_name }}',
+                {% endfor %}
+            },
+        )
     {% endif %}
 {% endif %}
 

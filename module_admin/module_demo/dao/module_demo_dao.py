@@ -7,6 +7,18 @@ from utils.page_util import PageUtil
 from datetime import datetime, time
 from config.get_db import get_db
 
+def is_empty_generated_value(value):
+    return value == '' or (isinstance(value, (list, dict)) and len(value) == 0)
+
+
+def normalize_empty_values(data, field_names):
+    normalized = data.copy()
+    for field_name in field_names:
+        if field_name in normalized and is_empty_generated_value(normalized.get(field_name)):
+            normalized[field_name] = None
+    return normalized
+
+
 class Module_demoDao:
     """
     Demo全类型测试模块数据库操作层
@@ -222,7 +234,69 @@ class Module_demoDao:
         :param module_demo: Demo全类型测试对象
         :return:
         """
-        db_module_demo = ModuleDemoAllTypes(**module_demo.model_dump(exclude={}))
+        payload = module_demo.model_dump(exclude_none=True, exclude={})
+        payload = normalize_empty_values(
+            payload,
+            {
+                'id',
+                'fixed_char_value',
+                'unicode_value',
+                'text_value',
+                'unicode_text_value',
+                'small_integer_value',
+                'integer_value',
+                'big_integer_value',
+                'numeric_value',
+                'decimal_value',
+                'money_value',
+                'float_value',
+                'real_value',
+                'double_value',
+                'boolean_value',
+                'date_value',
+                'time_value',
+                'time_tz_value',
+                'datetime_value',
+                'datetime_tz_value',
+                'interval_value',
+                'jsonpath_value',
+                'binary_value',
+                'enum_value',
+                'uuid_value',
+                'inet_value',
+                'cidr_value',
+                'macaddr_value',
+                'macaddr8_value',
+                'bit_value',
+                'bit_varying_value',
+                'tsvector_value',
+                'tsquery_value',
+                'int4_range_value',
+                'int8_range_value',
+                'numeric_range_value',
+                'date_range_value',
+                'timestamp_range_value',
+                'timestamp_tz_range_value',
+                'int4_multirange_value',
+                'int8_multirange_value',
+                'numeric_multirange_value',
+                'date_multirange_value',
+                'timestamp_multirange_value',
+                'timestamp_tz_multirange_value',
+                'oid_value',
+                'regclass_value',
+                'regconfig_value',
+                'create_by',
+                'create_time',
+                'update_by',
+                'update_time',
+                'remark',
+                'description',
+                'sort_no',
+                'del_flag',
+            },
+        )
+        db_module_demo = ModuleDemoAllTypes(**payload)
         db.add(db_module_demo)
         await db.flush()
 
@@ -237,6 +311,67 @@ class Module_demoDao:
         :param module_demo: 需要更新的Demo全类型测试字典
         :return:
         """
+        module_demo = normalize_empty_values(
+            module_demo,
+            {
+                'id',
+                'fixed_char_value',
+                'unicode_value',
+                'text_value',
+                'unicode_text_value',
+                'small_integer_value',
+                'integer_value',
+                'big_integer_value',
+                'numeric_value',
+                'decimal_value',
+                'money_value',
+                'float_value',
+                'real_value',
+                'double_value',
+                'boolean_value',
+                'date_value',
+                'time_value',
+                'time_tz_value',
+                'datetime_value',
+                'datetime_tz_value',
+                'interval_value',
+                'jsonpath_value',
+                'binary_value',
+                'enum_value',
+                'uuid_value',
+                'inet_value',
+                'cidr_value',
+                'macaddr_value',
+                'macaddr8_value',
+                'bit_value',
+                'bit_varying_value',
+                'tsvector_value',
+                'tsquery_value',
+                'int4_range_value',
+                'int8_range_value',
+                'numeric_range_value',
+                'date_range_value',
+                'timestamp_range_value',
+                'timestamp_tz_range_value',
+                'int4_multirange_value',
+                'int8_multirange_value',
+                'numeric_multirange_value',
+                'date_multirange_value',
+                'timestamp_multirange_value',
+                'timestamp_tz_multirange_value',
+                'oid_value',
+                'regclass_value',
+                'regconfig_value',
+                'create_by',
+                'create_time',
+                'update_by',
+                'update_time',
+                'remark',
+                'description',
+                'sort_no',
+                'del_flag',
+            },
+        )
         await db.execute(update(ModuleDemoAllTypes), [module_demo])
 
     @classmethod
