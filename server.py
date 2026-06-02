@@ -30,6 +30,7 @@ from module_admin.api_testing.api_setup.controller.setup_controller import setup
 from module_admin.api_testing.api_teardown.controller.teardown_controller import teardownController
 from module_admin.api_testing.api_test_cases.controller.test_cases_controller import test_casesController
 from module_admin.api_testing.api_test_execution_log.controller.execution_log_controller import execution_logController
+from module_admin.api_testing.schema_models.controller.schema_models_controller import schema_modelsController
 from module_admin.api_workflow.api_param_item.controller.api_param_item_controller import api_param_itemController
 from module_admin.api_workflow.api_param_table.controller.api_param_table_controller import api_param_tableController
 from module_admin.api_workflow.api_workflow_executions.controller.workflow_executions_controller import \
@@ -231,6 +232,7 @@ controller_list = [
     {'router': skillController, 'tags': ['AI技能管理']},
     {'router': module_demoController, 'tags': ['测试所有类型']},
     {'router': module_uuid_demoController, 'tags': ['测试uuid']},
+    {'router': schema_modelsController, 'tags': ['jsonschema管理']},
 ]
 
 for controller in controller_list:
