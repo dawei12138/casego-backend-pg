@@ -9,13 +9,11 @@ if str(BACKEND_ROOT) not in sys.path:
 
 
 def test_schema_model_do_tables_and_columns():
-    from module_admin.api_testing.api_schema_models.entity.do.schema_models_do import (
-        SchemaModel,
-        SchemaModelRef,
-        SchemaModelUsage,
-        SchemaModelVersion,
-        SchemaNode,
-    )
+    from module_admin.api_testing.schema_model_refs.entity.do.schema_model_refs_do import SchemaModelRef
+    from module_admin.api_testing.schema_model_usage.entity.do.schema_model_usage_do import SchemaModelUsage
+    from module_admin.api_testing.schema_model_versions.entity.do.versions_do import SchemaModelVersion
+    from module_admin.api_testing.schema_models.entity.do.schema_models_do import SchemaModel
+    from module_admin.api_testing.schema_nodes.entity.do.schema_nodes_do import SchemaNode
 
     assert SchemaModel.__tablename__ == 'schema_models'
     assert SchemaNode.__tablename__ == 'schema_nodes'
@@ -42,7 +40,7 @@ def test_schema_model_do_tables_and_columns():
 
 
 def test_schema_node_has_lookup_indexes():
-    from module_admin.api_testing.api_schema_models.entity.do.schema_models_do import SchemaNode
+    from module_admin.api_testing.schema_nodes.entity.do.schema_nodes_do import SchemaNode
 
     index_columns = {
         index.name: tuple(column.name for column in index.columns)

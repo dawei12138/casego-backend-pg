@@ -44,7 +44,11 @@ class Schema_nodesService:
         try:
             await Schema_nodesDao.add_schema_nodes_dao(query_db, page_object)
             await query_db.commit()
-            return CrudResponseModel(is_success=True, message='新增成功')
+            return CrudResponseModel(
+                is_success=True,
+                message='新增成功',
+                result=page_object.model_dump(by_alias=True),
+            )
         except Exception as e:
             await query_db.rollback()
             raise e
@@ -65,7 +69,8 @@ class Schema_nodesService:
             try:
                 await Schema_nodesDao.edit_schema_nodes_dao(query_db, edit_schema_nodes)
                 await query_db.commit()
-                return CrudResponseModel(is_success=True, message='更新成功')
+                result = Schema_nodesModel.model_validate(edit_schema_nodes).model_dump(by_alias=True)
+                return CrudResponseModel(is_success=True, message='更新成功', result=result)
             except Exception as e:
                 await query_db.rollback()
                 raise e

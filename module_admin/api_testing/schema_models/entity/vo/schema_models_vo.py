@@ -2,8 +2,9 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 from pydantic_validation_decorator import NotBlank
-from typing import Any, Optional
+from typing import Any, List, Optional
 from module_admin.annotation.pydantic_annotation import as_query
+from module_admin.api_testing.schema_nodes.entity.vo.schema_nodes_vo import Schema_nodesModel
 
 
 def is_empty_generated_value(value):
@@ -154,3 +155,37 @@ class DeleteSchema_modelsModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel)
 
     model_ids: str = Field(description='需要删除的模型ID')
+
+
+class CreateSchemaModelWithRootModel(BaseModel):
+    """
+    创建JSON Schema 数据模型及根节点请求模型
+    """
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    model: Schema_modelsModel = Field(description='模型主信息')
+    root_node: Schema_nodesModel = Field(description='根节点信息')
+
+
+class SchemaModelPreviewRequestModel(BaseModel):
+    """
+    JSON Schema 数据模型预览请求
+    """
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    model: Optional[Schema_modelsModel] = Field(default=None, description='模型主信息')
+    nodes: List[Schema_nodesModel] = Field(default_factory=list, description='当前模型节点，允许包含未保存修改')
+
+
+class SchemaModelPreviewResponseModel(BaseModel):
+    """
+    JSON Schema 数据模型预览响应
+    """
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    example: Any = Field(default=None, description='根据节点与Mock规则生成的示例JSON')
+    json_schema: Any = Field(default=None, alias='schema', description='根据节点生成的JSON Schema')
+    warnings: List[str] = Field(default_factory=list, description='生成过程中的非阻塞提示')

@@ -61,7 +61,7 @@ async def add_schemanode_schema_nodes(
     add_schema_nodes_result = await Schema_nodesService.add_schema_nodes_services(query_db, add_schema_nodes)
     logger.info(add_schema_nodes_result.message)
 
-    return ResponseUtil.success(msg=add_schema_nodes_result.message)
+    return ResponseUtil.success(msg=add_schema_nodes_result.message, data=add_schema_nodes_result.result)
 
 
 @schema_nodesController.put(
@@ -84,7 +84,7 @@ async def edit_schemanode_schema_nodes(
     edit_schema_nodes_result = await Schema_nodesService.edit_schema_nodes_services(query_db, edit_schema_nodes)
     logger.info(edit_schema_nodes_result.message)
 
-    return ResponseUtil.success(msg=edit_schema_nodes_result.message)
+    return ResponseUtil.success(msg=edit_schema_nodes_result.message, data=edit_schema_nodes_result.result)
 
 
 @schema_nodesController.delete(

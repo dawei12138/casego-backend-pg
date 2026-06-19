@@ -1,4 +1,4 @@
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from module_admin.api_testing.schema_models.entity.do.schema_models_do import SchemaModel
@@ -17,6 +17,17 @@ def normalize_empty_values(data, field_names):
         if field_name in normalized and is_empty_generated_value(normalized.get(field_name)):
             normalized[field_name] = None
     return normalized
+
+
+def build_model_keyword_filter(query_object):
+    if not query_object.name:
+        return True
+    keyword = f'%{query_object.name}%'
+    return or_(
+        SchemaModel.name.like(keyword),
+        SchemaModel.display_name.like(keyword),
+        SchemaModel.title.like(keyword),
+    )
 
 
 class Schema_modelsDao:
@@ -86,7 +97,7 @@ class Schema_modelsDao:
                 SchemaModel.project_id == query_object.project_id if query_object.project_id else True,
                 SchemaModel.case_id == query_object.case_id if query_object.case_id else True,
                 SchemaModel.group_id == query_object.group_id if query_object.group_id else True,
-                SchemaModel.name.like(f'%{query_object.name}%') if query_object.name else True,
+                build_model_keyword_filter(query_object),
                 SchemaModel.display_name.like(f'%{query_object.display_name}%') if query_object.display_name else True,
                 SchemaModel.title == query_object.title if query_object.title else True,
                 SchemaModel.schema_draft == query_object.schema_draft if query_object.schema_draft else True,
@@ -134,7 +145,7 @@ class Schema_modelsDao:
                 SchemaModel.project_id == query_object.project_id if query_object.project_id else True,
                 SchemaModel.case_id == query_object.case_id if query_object.case_id else True,
                 SchemaModel.group_id == query_object.group_id if query_object.group_id else True,
-                SchemaModel.name.like(f'%{query_object.name}%') if query_object.name else True,
+                build_model_keyword_filter(query_object),
                 SchemaModel.display_name.like(f'%{query_object.display_name}%') if query_object.display_name else True,
                 SchemaModel.title == query_object.title if query_object.title else True,
                 SchemaModel.schema_draft == query_object.schema_draft if query_object.schema_draft else True,
