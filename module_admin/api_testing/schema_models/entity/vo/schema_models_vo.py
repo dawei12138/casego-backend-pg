@@ -34,6 +34,7 @@ class Schema_modelsModel(BaseModel):
     project_id: Optional[int] = Field(default=None, description='所属项目ID')
     case_id: Optional[int] = Field(default=None, description='关联的测试用例ID')
     group_id: Optional[str] = Field(default=None, description='所属分组ID')
+    branch_id: Optional[str] = Field(default=None, description='所属分支ID')
     name: Optional[str] = Field(default=None, description='模型唯一名称')
     display_name: Optional[str] = Field(default=None, description='展示名称')
     title: Optional[str] = Field(default=None, description='JSON Schema标题')
@@ -102,6 +103,7 @@ class Schema_modelsModel(BaseModel):
                 'model_id': 'modelId',
                 'case_id': 'caseId',
                 'group_id': 'groupId',
+                'branch_id': 'branchId',
                 'name': 'name',
                 'display_name': 'displayName',
                 'title': 'title',
@@ -157,6 +159,31 @@ class DeleteSchema_modelsModel(BaseModel):
     model_ids: str = Field(description='需要删除的模型ID')
 
 
+class SchemaModelCopyRequestModel(BaseModel):
+    """
+    复制JSON Schema 数据模型请求模型
+    """
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    model_id: str = Field(description='来源模型ID')
+    target_group_id: Optional[str] = Field(default=None, description='目标目录ID')
+    target_branch_id: Optional[str] = Field(default=None, description='目标分支ID')
+    name: Optional[str] = Field(default=None, description='新模型名称')
+    display_name: Optional[str] = Field(default=None, description='新模型展示名称')
+
+
+class SchemaModelMoveRequestModel(BaseModel):
+    """
+    移动JSON Schema 数据模型到目录请求模型
+    """
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    model_id: str = Field(description='模型ID')
+    target_group_id: Optional[str] = Field(default=None, description='目标目录ID')
+
+
 class CreateSchemaModelWithRootModel(BaseModel):
     """
     创建JSON Schema 数据模型及根节点请求模型
@@ -189,3 +216,36 @@ class SchemaModelPreviewResponseModel(BaseModel):
     example: Any = Field(default=None, description='根据节点与Mock规则生成的示例JSON')
     json_schema: Any = Field(default=None, alias='schema', description='根据节点生成的JSON Schema')
     warnings: List[str] = Field(default_factory=list, description='生成过程中的非阻塞提示')
+
+
+class SchemaModelGenerateRequestModel(BaseModel):
+    """
+    JSON/XML/JSON Schema/数据库/Mockjs 生成数据模型请求。
+    """
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    source_type: str = Field(description='来源类型：JSON/XML/JSON_SCHEMA/DATABASE/MOCKJS/AI')
+    content: Optional[Any] = Field(default=None, description='待解析内容')
+    overwrite_mode: str = Field(default='smartMerge', description='覆盖模式：smartMerge/fullCover')
+    naming_style: str = Field(default='original', description='命名风格')
+    comment_target: Optional[str] = Field(default=None, description='注释写入目标：title/description/smartSplit')
+    follow_db_field_length: bool = Field(default=False, description='是否跟随数据库字段长度')
+    ddl_dialect: str = Field(default='mysql', description='DDL 方言')
+    model_id: str = Field(default='preview', description='生成节点使用的模型ID')
+    root_title: str = Field(default='GeneratedModel', description='根节点标题')
+
+
+class SchemaModelGenerateResponseModel(BaseModel):
+    """
+    JSON/XML/JSON Schema/数据库/Mockjs 生成数据模型响应。
+    """
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    source_type: str = Field(description='来源类型')
+    supported: bool = Field(default=True, description='是否已实现')
+    message: str = Field(default='生成成功', description='提示信息')
+    json_schema: Any = Field(default=None, alias='schema', description='生成的 JSON Schema')
+    nodes: List[Schema_nodesModel] = Field(default_factory=list, description='生成的可视化节点')
+    warnings: List[str] = Field(default_factory=list, description='非阻塞提示')

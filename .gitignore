@@ -21,6 +21,9 @@ bin-release/
 # information for Eclipse / Flash Builder.
 /logs
 /alembic
+!/alembic/
+!/alembic/versions/
+!/alembic/versions/*.py
 /CaseGo/upload_path/files
 /module_admin/api_project_submodules/dao/logs
 /module_fastmcp/logs

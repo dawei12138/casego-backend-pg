@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Float, Index, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from config.base import Base
@@ -67,3 +67,10 @@ class SchemaNode(Base):
     expanded = Column(Boolean, nullable=True, default=False, comment='是否展开')
     locked = Column(Boolean, nullable=True, default=False, comment='是否锁定')
     sort_no = Column(Float, nullable=False, default=0, comment='排序号')
+    create_by = Column(String(64), nullable=True, comment='')
+    create_time = Column(DateTime, nullable=True, comment='创建时间')
+    update_by = Column(String(64), nullable=True, comment='')
+    update_time = Column(DateTime, nullable=True, comment='更新时间')
+    remark = Column(String(500), nullable=True, comment='')
+    description = Column(Text, nullable=True, comment='')
+    del_flag = Column(String(1), nullable=True, default='0', comment='')

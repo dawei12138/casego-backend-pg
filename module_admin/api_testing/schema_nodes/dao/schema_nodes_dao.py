@@ -5,7 +5,6 @@ from module_admin.api_testing.schema_nodes.entity.do.schema_nodes_do import Sche
 from module_admin.api_testing.schema_nodes.entity.vo.schema_nodes_vo import Schema_nodesModel, Schema_nodesPageQueryModel, Schema_nodesQueryModel
 from utils.page_util import PageUtil
 from datetime import datetime, time
-from config.get_db import get_db
 
 def is_empty_generated_value(value):
     return value == '' or (isinstance(value, (list, dict)) and len(value) == 0)
@@ -314,8 +313,20 @@ class Schema_nodesDao:
         #await db.execute(delete(SchemaNode).where(SchemaNode.node_id.in_([schema_nodes.node_id])))
         await db.execute(update(SchemaNode).where(SchemaNode.node_id.in_([schema_nodes.node_id])).values(del_flag="1"))
 
+    @classmethod
+    async def delete_schema_nodes_by_model_id_dao(cls, db: AsyncSession, model_id: str):
+        """
+        根据模型ID软删除JSON Schema 可视化节点。
+
+        :param db: orm对象
+        :param model_id: 模型ID
+        :return:
+        """
+        await db.execute(update(SchemaNode).where(SchemaNode.model_id == model_id).values(del_flag="1"))
+
 if __name__ == '__main__':
     import asyncio
+    from config.get_db import get_db
 
 
     async def main():

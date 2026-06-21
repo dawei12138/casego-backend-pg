@@ -23,6 +23,8 @@ class SchemaModelPreviewService:
     """
 
     _faker = Faker(locale='zh_CN')
+    _any_type_list = ['string', 'integer', 'boolean', 'array', 'object', 'number', 'null']
+    _composition_types = {'allOf', 'anyOf', 'oneOf'}
     _schema_keywords = {
         '$schema',
         'type',
@@ -31,6 +33,9 @@ class SchemaModelPreviewService:
         'properties',
         'required',
         'items',
+        'oneOf',
+        'anyOf',
+        'allOf',
         'format',
         'default',
         'example',
@@ -40,6 +45,7 @@ class SchemaModelPreviewService:
         'deprecated',
         'readOnly',
         'writeOnly',
+        'x-apifox-orders',
     }
     _constraint_keywords = {
         'minLength',
@@ -110,6 +116,11 @@ class SchemaModelPreviewService:
     @classmethod
     def _build_node_schema(cls, node: Schema_nodesModel, child_map: dict[str, list[Schema_nodesModel]]) -> dict[str, Any]:
         node_type = cls._node_type(node)
+        composition_type = cls._composition_type(node)
+
+        if node_type == 'custom' and isinstance(node.raw_schema, dict):
+            return cls._compact(deepcopy(node.raw_schema))
+
         schema: dict[str, Any] = {}
 
         if isinstance(node.raw_schema, dict):
@@ -117,7 +128,18 @@ class SchemaModelPreviewService:
         if isinstance(node.raw_schema_extras, dict):
             schema.update(node.raw_schema_extras)
 
-        schema['type'] = cls._schema_type(node)
+        if composition_type:
+            candidates = [
+                child for child in child_map.get(node.node_id, []) if child.node_kind == 'composition'
+            ]
+            schema[composition_type] = [
+                cls._build_node_schema(child, child_map) for child in candidates
+            ] or [{'type': 'string'}]
+        elif node_type == 'ref':
+            pass
+        else:
+            schema['type'] = cls._schema_type(node)
+
         cls._assign_if_present(schema, 'title', node.title)
         cls._assign_if_present(schema, 'description', node.description)
         cls._assign_if_present(schema, 'format', node.format)
@@ -136,7 +158,15 @@ class SchemaModelPreviewService:
         if node.const_enabled and cls._has_value(node.const_value):
             schema['const'] = node.const_value
         if node.ref_config and isinstance(node.ref_config, dict) and node.ref_config.get('modelId'):
-            schema['x-ref-model-id'] = node.ref_config.get('modelId')
+            ref_model_id = node.ref_config.get('modelId')
+            ref_name = (
+                node.ref_config.get('name')
+                or node.ref_config.get('title')
+                or node.ref_config.get('displayName')
+                or ref_model_id
+            )
+            schema['$ref'] = node.ref_config.get('ref') or f'#/components/schemas/{ref_name}'
+            schema['x-ref-model-id'] = ref_model_id
         if node.mock_enabled:
             schema['x-mock-enabled'] = True
         cls._assign_if_present(schema, 'x-mock-type', node.mock_type)
@@ -146,21 +176,23 @@ class SchemaModelPreviewService:
         if isinstance(node.constraints, dict):
             schema.update({key: value for key, value in node.constraints.items() if value not in (None, '')})
 
-        if node_type == 'object':
+        if not composition_type and node_type == 'object':
             properties: dict[str, Any] = {}
             required: list[str] = []
+            orders: list[str] = []
             for child in child_map.get(node.node_id, []):
                 if child.node_kind != 'property' or not child.field_name:
                     continue
+                orders.append(child.field_name)
                 properties[child.field_name] = cls._build_node_schema(child, child_map)
                 if child.required:
                     required.append(child.field_name)
-            if properties:
-                schema['properties'] = properties
+            schema['properties'] = properties
+            schema['x-apifox-orders'] = orders
             if required:
                 schema['required'] = required
 
-        if node_type == 'array':
+        if not composition_type and node_type == 'array':
             items_node = next((child for child in child_map.get(node.node_id, []) if child.node_kind == 'items'), None)
             schema['items'] = cls._build_node_schema(items_node, child_map) if items_node else {'type': 'string'}
 
@@ -174,6 +206,14 @@ class SchemaModelPreviewService:
         context: dict[str, Any],
     ) -> Any:
         node_type = cls._node_type(node)
+        composition_type = cls._composition_type(node)
+        if composition_type:
+            first_candidate = next(
+                (child for child in child_map.get(node.node_id, []) if child.node_kind == 'composition'),
+                None,
+            )
+            return cls._build_node_example(first_candidate, child_map, context) if first_candidate else None
+
         if node_type == 'object':
             referenced = cls._build_referenced_example(node, context)
             if referenced is not _Missing:
@@ -388,16 +428,36 @@ class SchemaModelPreviewService:
 
     @classmethod
     def _node_type(cls, node: Schema_nodesModel) -> str:
+        if isinstance(node.type_list, list) and cls._is_any_type_list(node.type_list):
+            return 'any'
+        if node.type in cls._composition_types:
+            return node.type
+        if node.type == 'ref':
+            return 'ref'
         if isinstance(node.type_list, list) and node.type_list:
             return next((item for item in node.type_list if item != 'null'), node.type_list[0])
         return node.type or 'string'
 
     @classmethod
     def _schema_type(cls, node: Schema_nodesModel) -> str | list[str]:
+        if cls._node_type(node) == 'any':
+            return list(cls._any_type_list)
         if isinstance(node.type_list, list) and node.type_list:
             return node.type_list
         node_type = cls._node_type(node)
         return [node_type, 'null'] if node.nullable and node_type != 'null' else node_type
+
+    @classmethod
+    def _composition_type(cls, node: Schema_nodesModel) -> str:
+        if node.type in cls._composition_types:
+            return node.type
+        if isinstance(node.composition, dict) and node.composition.get('type') in cls._composition_types:
+            return node.composition['type']
+        return ''
+
+    @classmethod
+    def _is_any_type_list(cls, value: list[Any]) -> bool:
+        return len(value) == len(cls._any_type_list) and all(item in value for item in cls._any_type_list)
 
     @staticmethod
     def _schema_draft_url(schema_draft: str) -> str:

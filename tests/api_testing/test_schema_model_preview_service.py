@@ -374,3 +374,63 @@ def test_preview_generator_keeps_object_and_array_children_when_container_has_mo
     assert result.example['lines'] == [{'name': '商品A', 'count': 2}]
     assert set(result.json_schema['properties']['amount']['properties'].keys()) == {'amountText', 'value'}
     assert set(result.json_schema['properties']['lines']['items']['properties'].keys()) == {'name', 'count'}
+
+
+def test_preview_generator_outputs_apifox_orders_any_and_composition():
+    from module_admin.api_testing.schema_models.entity.vo.schema_models_vo import Schema_modelsModel
+    from module_admin.api_testing.schema_models.service.schema_model_preview_service import SchemaModelPreviewService
+    from module_admin.api_testing.schema_nodes.entity.vo.schema_nodes_vo import Schema_nodesModel
+
+    def node(node_id, parent_id, node_kind, field_name, node_type, *, sort_no=1, type_list=None):
+        return Schema_nodesModel(
+            nodeId=node_id,
+            modelId='schema_probe',
+            parentId=parent_id,
+            rootId='root',
+            nodeKind=node_kind,
+            fieldName=field_name,
+            type=node_type,
+            typeList=type_list,
+            nullable=False,
+            required=False,
+            deprecated=False,
+            accessMode='readWrite',
+            enumEnabled=False,
+            constEnabled=False,
+            mockEnabled=False,
+            level=0 if node_id == 'root' else 1,
+            sortNo=sort_no,
+        )
+
+    nodes = [
+        node('root', None, 'root', None, 'object', sort_no=0),
+        node('second', 'root', 'property', 'second', 'string', sort_no=2),
+        node(
+            'any_value',
+            'root',
+            'property',
+            'anyValue',
+            'any',
+            sort_no=3,
+            type_list=['string', 'integer', 'boolean', 'array', 'object', 'number', 'null'],
+        ),
+        node('mixed', 'root', 'property', 'mixed', 'oneOf', sort_no=4),
+        node('mixed_0', 'mixed', 'composition', '0', 'string', sort_no=0),
+        node('mixed_1', 'mixed', 'composition', '1', 'integer', sort_no=1),
+        node('first', 'root', 'property', 'first', 'integer', sort_no=1),
+    ]
+
+    result = SchemaModelPreviewService.build_preview(Schema_modelsModel(modelId='schema_probe'), nodes)
+    schema = result.json_schema
+
+    assert schema['x-apifox-orders'] == ['first', 'second', 'anyValue', 'mixed']
+    assert schema['properties']['anyValue']['type'] == [
+        'string',
+        'integer',
+        'boolean',
+        'array',
+        'object',
+        'number',
+        'null',
+    ]
+    assert schema['properties']['mixed']['oneOf'] == [{'type': 'string'}, {'type': 'integer'}]

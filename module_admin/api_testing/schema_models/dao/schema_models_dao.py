@@ -5,7 +5,6 @@ from module_admin.api_testing.schema_models.entity.do.schema_models_do import Sc
 from module_admin.api_testing.schema_models.entity.vo.schema_models_vo import Schema_modelsModel, Schema_modelsPageQueryModel, Schema_modelsQueryModel
 from utils.page_util import PageUtil
 from datetime import datetime, time
-from config.get_db import get_db
 
 def is_empty_generated_value(value):
     return value == '' or (isinstance(value, (list, dict)) and len(value) == 0)
@@ -97,6 +96,7 @@ class Schema_modelsDao:
                 SchemaModel.project_id == query_object.project_id if query_object.project_id else True,
                 SchemaModel.case_id == query_object.case_id if query_object.case_id else True,
                 SchemaModel.group_id == query_object.group_id if query_object.group_id else True,
+                SchemaModel.branch_id == query_object.branch_id if query_object.branch_id else True,
                 build_model_keyword_filter(query_object),
                 SchemaModel.display_name.like(f'%{query_object.display_name}%') if query_object.display_name else True,
                 SchemaModel.title == query_object.title if query_object.title else True,
@@ -145,6 +145,7 @@ class Schema_modelsDao:
                 SchemaModel.project_id == query_object.project_id if query_object.project_id else True,
                 SchemaModel.case_id == query_object.case_id if query_object.case_id else True,
                 SchemaModel.group_id == query_object.group_id if query_object.group_id else True,
+                SchemaModel.branch_id == query_object.branch_id if query_object.branch_id else True,
                 build_model_keyword_filter(query_object),
                 SchemaModel.display_name.like(f'%{query_object.display_name}%') if query_object.display_name else True,
                 SchemaModel.title == query_object.title if query_object.title else True,
@@ -194,6 +195,7 @@ class Schema_modelsDao:
                 'model_id',
                 'case_id',
                 'group_id',
+                'branch_id',
                 'name',
                 'display_name',
                 'title',
@@ -239,6 +241,7 @@ class Schema_modelsDao:
                 'model_id',
                 'case_id',
                 'group_id',
+                'branch_id',
                 'name',
                 'display_name',
                 'title',
@@ -279,6 +282,7 @@ class Schema_modelsDao:
 
 if __name__ == '__main__':
     import asyncio
+    from config.get_db import get_db
 
 
     async def main():

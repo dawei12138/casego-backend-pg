@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Float, Index, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from config.base import Base
@@ -13,6 +13,7 @@ class SchemaModel(Base):
     __table_args__ = (
         Index('ix_schema_models_project_id', 'project_id'),
         Index('ix_schema_models_group_id', 'group_id'),
+        Index('ix_schema_models_branch_id', 'branch_id'),
         Index('ix_schema_models_name', 'name'),
         Index('ix_schema_models_status', 'status'),
         {'comment': 'JSON Schema 数据模型主表'},
@@ -22,6 +23,7 @@ class SchemaModel(Base):
     project_id = Column(Integer, nullable=False, comment='所属项目ID')
     case_id = Column(Integer, nullable=True, comment='关联的测试用例ID')
     group_id = Column(String(64), nullable=True, comment='所属分组ID')
+    branch_id = Column(String(64), nullable=True, comment='所属分支ID')
     name = Column(String(128), nullable=True, comment='模型唯一名称')
     display_name = Column(String(128), nullable=True, comment='展示名称')
     title = Column(String(256), nullable=True, comment='JSON Schema标题')
@@ -44,5 +46,11 @@ class SchemaModel(Base):
     raw_schema_extras = Column(JSONB, nullable=True, comment='模型级扩展Schema关键字')
     generated_schema = Column(JSONB, nullable=True, comment='生成后的JSON Schema')
     tags = Column(JSONB, nullable=True, comment='标签')
-
-
+    create_by = Column(String(64), nullable=True, comment='')
+    create_time = Column(DateTime, nullable=True, comment='创建时间')
+    update_by = Column(String(64), nullable=True, comment='')
+    update_time = Column(DateTime, nullable=True, comment='更新时间')
+    remark = Column(String(500), nullable=True, comment='')
+    description = Column(Text, nullable=True, comment='')
+    sort_no = Column(Float, nullable=True, comment='')
+    del_flag = Column(String(1), nullable=True, default='0', comment='')

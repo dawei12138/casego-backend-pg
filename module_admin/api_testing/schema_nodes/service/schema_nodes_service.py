@@ -41,6 +41,7 @@ class Schema_nodesService:
         :return: 新增JSON Schema 可视化节点校验结果
         """
         page_object = Schema_nodesModel.model_validate(page_object.model_dump())
+        cls._validate_schema_node_business_rules(page_object)
         try:
             await Schema_nodesDao.add_schema_nodes_dao(query_db, page_object)
             await query_db.commit()
@@ -63,6 +64,7 @@ class Schema_nodesService:
         :return: 编辑JSON Schema 可视化节点校验结果
         """
         page_object = Schema_nodesModel.model_validate(page_object.model_dump())
+        cls._validate_schema_node_business_rules(page_object)
         edit_schema_nodes = page_object.model_dump(exclude_unset=True, exclude={'create_by', 'create_time', 'del_flag'})
         schema_nodes_info = await cls.schema_nodes_detail_services(query_db, page_object.node_id)
         if schema_nodes_info.node_id:
@@ -76,6 +78,11 @@ class Schema_nodesService:
                 raise e
         else:
             raise ServiceException(message='JSON Schema 可视化节点不存在')
+
+    @staticmethod
+    def _validate_schema_node_business_rules(node: Schema_nodesModel):
+        if node.node_kind == 'property' and not str(node.field_name or '').strip():
+            raise ServiceException(message='字段名不能为空')
 
     @classmethod
     async def delete_schema_nodes_services(cls, query_db: AsyncSession, page_object: DeleteSchema_nodesModel):
